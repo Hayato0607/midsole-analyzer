@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ミッドソール圧縮アナライザー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>ミッドソール圧縮アナライザー</h1>
+  <p>真横から撮ったスロー動画で、接地中のミッドソールの厚みの変化を追い、ヒール・ミッド・フォアの圧縮率を出します。</p>
+</header>
+<main class="layout">
+  <section class="primary">
+    <div class="stage" id="stage">
+      <video id="video" playsinline muted preload="auto"></video>
+      <canvas id="overlay" aria-label="測定点の表示と編集"></canvas>
+      <label class="drop" id="drop"><span><strong>動画を選ぶ</strong>ここにドロップ、またはタップしてファイルを選択</span><input id="file" type="file" accept="video/*,.mov,.mp4" hidden></label>
+      <div class="stage-note" id="stageNote"></div>
+    </div>
+    <div class="transport">
+      <button class="btn icon" id="prev" aria-label="1フレーム戻る" disabled><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+      <button class="btn icon" id="play" aria-label="再生" disabled><svg viewBox="0 0 16 16" id="playIcon"><path d="M4 2l10 6-10 6z"/></svg></button>
+      <button class="btn icon" id="next" aria-label="1フレーム進む" disabled><svg viewBox="0 0 16 16"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+      <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="フレーム位置" disabled>
+      <span class="frame-label num" id="frameLabel">f —</span>
+      <select id="rate" aria-label="再生速度">
+        <option value="0.1">0.1倍</option><option value="0.25" selected>0.25倍</option><option value="0.5">0.5倍</option><option value="1">1倍</option>
+      </select>
+      <label class="range-only"><input type="checkbox" id="rangeOnly" disabled>解析範囲だけ再生</label>
+    </div>
+    <div class="gauges" id="gauges">
+      <div class="gauge" style="--c:var(--heel)"><div class="block"><div class="ground"></div><div class="foam"></div><div class="plate"></div></div><div class="g-body"><div class="g-name">ヒール</div><div class="g-val num">—<span>%</span></div><div class="g-sub">解析前</div></div></div>
+      <div class="gauge" style="--c:var(--mid)"><div class="block"><div class="ground"></div><div class="foam"></div><div class="plate"></div></div><div class="g-body"><div class="g-name">ミッド</div><div class="g-val num">—<span>%</span></div><div class="g-sub">解析前</div></div></div>
+      <div class="gauge" style="--c:var(--fore)"><div class="block"><div class="ground"></div><div class="foam"></div><div class="plate"></div></div><div class="g-body"><div class="g-name">フォア</div><div class="g-val num">—<span>%</span></div><div class="g-sub">解析前</div></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>圧縮率の推移</h2>
+        <div class="legend"><span style="--c:var(--heel)"><i></i>ヒール</span><span style="--c:var(--mid)"><i></i>ミッド</span><span style="--c:var(--fore)"><i></i>フォア</span></div>
+      </div>
+      <canvas id="chart"></canvas>
+      <p class="hint">グラフをタップするか左右にドラッグすると、そのフレームに移動します。破線の縦線が無負荷の基準フレームです。線が途切れている所は、画面外や追跡不良で測れなかったフレームです。</p>
+    </div>
+    <div class="panel">
+      <h2>厚み方向の時系列</h2>
+      <p class="hint">各測定位置の厚み方向の画素を時間順に並べた画像です（縦が厚み方向、横が時間）。上下2本の線がミッドソールの上端と下端の境目に沿っていれば、正しく追えています。</p>
+      <div class="kymos">
+        <div class="kymo" style="--c:var(--heel)"><h3>ヒール</h3><canvas></canvas></div>
+        <div class="kymo" style="--c:var(--mid)"><h3>ミッド</h3><canvas></canvas></div>
+        <div class="kymo" style="--c:var(--fore)"><h3>フォア</h3><canvas></canvas></div>
+      </div>
+    </div>
+  </section>
+  <aside class="side">
+    <ol class="steps">
+      <li class="step" id="s1" data-state="active">
+        <h3>動画を読み込む</h3>
+        <p>靴の真横から、ソールの高さで撮ったスロー動画を使います。</p>
+        <div class="row"><button class="btn" id="pick">動画を選ぶ</button><label>動画のfps <input type="number" id="fps" value="30" min="1" max="1000" step="1"></label></div>
+        <p class="status" id="loadStatus">iPhoneのスロー動画を書き出したファイルは通常30fpsです。</p>
+      </li>
+      <li class="step" id="s2">
+        <h3>ミッドソールを指定</h3>
+        <p>靴がブレずにはっきり写っているフレームに移動してから検出します。</p>
+        <div class="row"><button class="btn" id="detect" disabled>このフレームで自動検出</button><button class="btn" id="flip" disabled>つま先の向きを反転</button></div>
+        <p class="hint">うまく合わないときは、動画の上でミッドソールの上端から下端までを囲むようにドラッグしてください。各点はドラッグで動かせます。</p>
+        <p class="status" id="detectStatus"></p>
+      </li>
+      <li class="step" id="s3">
+        <h3>解析範囲を決める</h3>
+        <p>開始は接地の少し前の空中フレームにすると、そこが無負荷の基準になります。</p>
+        <dl class="range" id="rangeList"><dt>開始</dt><dd id="rStart">—</dd><dt>マーク</dt><dd id="rMark">—</dd><dt>終了</dt><dd id="rEnd">—</dd></dl>
+        <div class="row"><button class="btn" id="setStart" disabled>表示中を開始にする</button><button class="btn" id="setEnd" disabled>表示中を終了にする</button></div>
+        <p class="status" id="rangeStatus"></p>
+      </li>
+      <li class="step" id="s4">
+        <h3>解析する</h3>
+        <div class="row"><button class="btn primary" id="run" disabled>解析する</button></div>
+        <progress id="prog" max="1" value="0" hidden></progress>
+        <p class="status" id="runStatus"></p>
+      </li>
+      <li class="step" id="s5">
+        <h3>結果を整える</h3>
+        <div class="row"><button class="btn" id="setBase" disabled>表示中を無負荷の基準にする</button></div>
+        <p class="status" id="baseStatus"></p>
+        <div class="row" style="display:block"><label style="display:block">追跡のなめらかさ<input type="range" class="smooth" id="smooth" min="0" max="100" value="40" disabled></label></div>
+        <p class="hint">上げると厚みの細かい揺れを抑え、下げると急な変化に素早く追従します。測定点がずれているフレームでは、点をドラッグして正しい境目に合わせると、その前後の追跡もやり直します。</p>
+        <div class="row"><label>撮影fps（任意） <input type="number" id="capfps" placeholder="例 240" min="1" max="10000"></label></div>
+        <p class="hint">入力すると、基準フレームからの実時間（ミリ秒）も表示します。</p>
+        <div class="row"><button class="btn" id="clearCons" disabled>手動の補正をすべて消す</button><button class="btn" id="csv" disabled>CSVを書き出す</button></div>
+        <p class="status" id="csvStatus"></p>
+        <textarea id="csvBox" hidden aria-label="CSVの内容"></textarea>
+      </li>
+    </ol>
+    <details class="notes">
+      <summary>測定の前提と注意</summary>
+      <ul>
+        <li>真横から見たミッドソール側面の、見かけの厚みの変化です。カメラの角度、足の内外への傾き、レンズの歪みで数%単位の誤差が出ます。</li>
+        <li>厚みが100 pxなら1 pxの誤差が1%に相当します。靴を画面いっぱいに大きく写すほど精度が上がります。</li>
+        <li>撮影はカメラを固定し、ソールの高さで真横から。靴底の下に地面が少し写るようにすると、下端が画面外に切れません。明るい場所で撮るとブレが減ります。</li>
+        <li>空中のフレームは動きのブレで厚みが少しずれることがあります。基準はブレの少ない接地直前のフレームが理想です。</li>
+        <li>基準より厚く見えたフレーム（計算上マイナス）は、画面では0%と表示します。CSVにはマイナスも含めた計算値をそのまま残しています。</li>
+        <li>研究用途では、ミッドソール側面の3か所の上下に小さな黒い点を描いておくと、境目がはっきりして追跡が安定します。</li>
+      </ul>
+    </details>
+  </aside>
+</main>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

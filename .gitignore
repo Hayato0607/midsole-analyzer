@@ -1,0 +1,10 @@
+# 動画やCSVは公開リポジトリに入れない
+*.mov
+*.MOV
+*.mp4
+*.MP4
+*.webm
+*.csv
+.DS_Store
+Thumbs.db
+desktop.ini
