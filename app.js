@@ -410,6 +410,7 @@ function updateUI() {
   $('#s3').dataset.state = state(!!S.stations && S.start !== null, !!S.stations);
   $('#s4').dataset.state = state(!!S.A, !!S.stations);
   $('#s5').dataset.state = state(false, !!S.A);
+  window.dispatchEvent(new Event('msa:update'));
 }
 
 // ---------- events ----------
@@ -589,5 +590,37 @@ chart.addEventListener('pointerup', endChartDrag);
 chart.addEventListener('pointercancel', endChartDrag);
 kymoCanvases.forEach(cv => cv.addEventListener('pointerdown', ev => { if (!S.A) return; const b = cv.getBoundingClientRect(), nF = S.A.last - S.A.first + 1; const fi = S.A.first + Math.floor((ev.clientX - b.left) / b.width * nF); if (!S.busy) { video.pause(); seekTo(clamp(fi, 0, S.N - 1)); } }));
 if (window.ResizeObserver) new ResizeObserver(() => drawAll()).observe(document.body); else window.addEventListener('resize', drawAll);
+// ---------- API for the event (try-on) module ----------
+async function saveText(filename, text) {
+  if (!window.claude) {
+    try {
+      const url = URL.createObjectURL(new Blob([text], { type: /\.json$/.test(filename) ? 'application/json' : 'text/csv' }));
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);
+      return 'ok';
+    } catch (e) {}
+  }
+  const dl = await downloadsP;
+  if (dl) {
+    try { await dl.save({ filename, data: text }); return 'ok'; }
+    catch (e) { if (e && e.code === 'declined') return 'declined'; if (e && e.code === 'rate_limited') return 'rate'; }
+  }
+  try { await navigator.clipboard.writeText(text); return 'clipboard'; } catch (e) { return 'fail'; }
+}
+function snapshot() {
+  const A = S.A; if (!A || S.busy) return null;
+  const frames = []; for (let fi = A.first; fi <= A.last; fi++) if (A.timeline.has(fi)) frames.push(fi);
+  const pct = v => v === null ? null : +(v * 100).toFixed(2);
+  return {
+    video: S.name, baseAbs: A.base, fps: S.fps, capFps: S.capFps || 0, first: A.first - A.base, last: A.last - A.base, mark: S.mark - A.base,
+    frames: frames.map(fi => fi - A.base),
+    comp: [0, 1, 2].map(k => frames.map(fi => pct(compAt(k, fi)))),
+    raw: [0, 1, 2].map(k => frames.map(fi => pct(compRaw(k, fi)))),
+    thick: [0, 1, 2].map(k => frames.map(fi => { const r = resAt(k, fi); return r ? +r.h.toFixed(2) : null; })),
+    peak: A.peak.map(p => p ? { v: +(p.v * 100).toFixed(2), f: p.fi - A.base } : null),
+    savedAt: new Date().toISOString()
+  };
+}
+window.MSA = { snapshot, saveText, hasResult: () => !!S.A && !S.busy };
 updateUI(); drawAll();
 })();

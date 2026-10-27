@@ -12,10 +12,20 @@
 <body>
 <header class="top">
   <h1>ミッドソール圧縮アナライザー</h1>
-  <p>真横から撮ったスロー動画で、接地中のミッドソールの厚みの変化を追い、ヒール・ミッド・フォアの圧縮率を出します。</p>
+  <p>真横から撮ったスロー動画で接地中のミッドソールの厚みの変化を追い、ヒール・ミッド・フォアの圧縮率を出します。体験会では2足の結果を参加者ごとに比べられます。</p>
 </header>
-<main class="layout">
+<nav class="tabs" role="tablist" aria-label="画面の切り替え">
+  <button type="button" id="tabAnalysis" role="tab" aria-selected="true">解析</button>
+  <button type="button" id="tabEvent" role="tab" aria-selected="false">体験会・比較</button>
+</nav>
+<main class="layout" id="viewAnalysis">
   <section class="primary">
+    <div class="savebar" id="evSavebar">
+      <label class="sb-p">保存先 <select id="evSaveP" aria-label="保存先の参加者"></select></label>
+      <div class="seg2" id="evShoeSeg" role="group" aria-label="シューズ"><button type="button" aria-pressed="true">A</button><button type="button" aria-pressed="false">B</button></div>
+      <button class="btn primary" id="evSave" disabled>この歩を追加</button>
+      <p class="status sb-status" id="evSaveStatus"></p>
+    </div>
     <div class="stage" id="stage">
       <video id="video" playsinline muted preload="auto"></video>
       <canvas id="overlay" aria-label="測定点の表示と編集"></canvas>
@@ -110,7 +120,144 @@
     </details>
   </aside>
 </main>
+
+<section class="event" id="viewEvent" hidden>
+  <aside class="ev-side">
+    <div class="panel">
+      <div class="panel-head"><h2>参加者</h2><button class="btn" id="evAdd">＋ 参加者を追加</button></div>
+      <ul class="ev-list" id="evList"></ul>
+    </div>
+    <div class="panel">
+      <h2>設定</h2>
+      <div class="field"><label for="evShoeA">シューズA（短い距離向きの想定）</label><input id="evShoeA" type="text"></div>
+      <div class="field"><label for="evShoeB">シューズB（長い距離向きの想定）</label><input id="evShoeB" type="text"></div>
+      <div class="field"><label for="evCapFps">撮影fps</label><input id="evCapFps" type="number" min="1" placeholder="例 240"></div>
+      <p class="hint">撮影fpsを入れると、時間をミリ秒で表示します。全員を同じ条件（目標レースペース、同じカメラ位置、240fps以上）で撮影してください。</p>
+      <details class="cfg"><summary>判定の詳細設定</summary>
+        <p class="subh">実測の厚さ（mm、推定圧縮量の計算に使用）</p>
+        <div class="grid3">
+          <div class="field"><label>A ヒール</label><input type="number" step="0.1" data-cfg="refA.0"></div>
+          <div class="field"><label>A ミッド</label><input type="number" step="0.1" data-cfg="refA.1"></div>
+          <div class="field"><label>A フォア</label><input type="number" step="0.1" data-cfg="refA.2"></div>
+          <div class="field"><label>B ヒール</label><input type="number" step="0.1" data-cfg="refB.0"></div>
+          <div class="field"><label>B ミッド</label><input type="number" step="0.1" data-cfg="refB.1"></div>
+          <div class="field"><label>B フォア</label><input type="number" step="0.1" data-cfg="refB.2"></div>
+        </div>
+        <p class="subh">圧縮率の基準値（空欄なら参加者内の上位・下位1/3で判定）</p>
+        <div class="grid2">
+          <div class="field"><label>ルールB：Aの着地部位がこの%以上</label><input type="number" step="0.1" data-cfg="thrB"></div>
+          <div class="field"><label>ルールC：Bの着地部位がこの%以下</label><input type="number" step="0.1" data-cfg="thrC"></div>
+        </div>
+        <p class="subh">注意フラグのしきい値</p>
+        <div class="grid3">
+          <div class="field"><label>ペース（キロ）</label><input type="text" data-cfg="paceFlag"></div>
+          <div class="field"><label>速いランナー（フル換算）</label><input type="text" data-cfg="fastFull"></div>
+          <div class="field"><label>月間走行距離が少ない（km未満）</label><input type="number" data-cfg="lowMileage"></div>
+        </div>
+      </details>
+    </div>
+    <div class="panel">
+      <h2>データ</h2>
+      <div class="row"><button class="btn" id="evCsv">全員分をCSVで書き出す</button><button class="btn" id="evStepsCsv">歩ごとのCSV</button></div>
+      <div class="row"><button class="btn" id="evBackup">バックアップを書き出す</button><button class="btn" id="evRestore">バックアップを読み込む</button></div>
+      <input type="file" id="evRestoreFile" accept=".json,application/json" hidden>
+      <div class="row"><button class="btn danger" id="evClear">全データを削除</button></div>
+      <p class="hint">データはこのブラウザの中にだけ保存されます（動画は保存しません）。体験会の途中でも、こまめにバックアップを書き出してください。</p>
+      <p class="status" id="evDataStatus"></p>
+    </div>
+  </aside>
+  <div class="ev-main">
+    <div class="panel ev-none" id="evNone"><p>参加者を追加すると、事前入力・解析結果・推定結果がここに表示されます。</p><button class="btn primary" id="evAdd2">＋ 参加者を追加</button></div>
+    <div id="evDetail" hidden>
+      <div class="panel" id="evSheetPanel">
+        <div class="panel-head"><h2>結果シート：距離ごとの使い分けの目安</h2><button class="btn small no-print" id="evPrint">印刷</button></div>
+        <div id="evSheet"></div>
+      </div>
+      <div class="panel">
+        <h2>スタッフ用チェック</h2>
+        <ul class="ev-checks" id="evChecks"></ul>
+      </div>
+      <div class="panel">
+        <h2>事前入力</h2>
+        <p class="presum" id="evPreSummary"></p>
+        <div class="grid2">
+          <div class="field"><label for="evName">名前</label><input id="evName" type="text" data-f="name"></div>
+          <div class="field"><label for="evSlot">枠</label><select id="evSlot" data-f="slot"><option value="">—</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+        </div>
+        <label class="chk"><input type="checkbox" data-f="consent">撮影・データ利用（アシックスへの集計データ共有を含む）に同意済み</label>
+        <p class="subh">自己ベスト（1つ以上）</p>
+        <div class="grid4">
+          <div class="field"><label>5K</label><input type="text" data-f="pb.5K" placeholder="19:30"></div>
+          <div class="field"><label>10K</label><input type="text" data-f="pb.10K" placeholder="41:00"></div>
+          <div class="field"><label>ハーフ</label><input type="text" data-f="pb.ハーフ" placeholder="1:32:00"></div>
+          <div class="field"><label>フル</label><input type="text" data-f="pb.フル" placeholder="3:15:00"></div>
+        </div>
+        <p class="subh">目標レースと練習</p>
+        <div class="grid4">
+          <div class="field"><label>目標レースの距離</label><select data-f="race.dist"><option value="">—</option><option value="5K">5K</option><option value="10K">10K</option><option value="ハーフ">ハーフ</option><option value="30K">30K</option><option value="フル">フル</option></select></div>
+          <div class="field"><label>目標タイム</label><input type="text" data-f="race.time" placeholder="3:30:00"></div>
+          <div class="field"><label>月間走行距離（km）</label><input type="number" data-f="monthly"></div>
+          <div class="field"><label>練習での最長距離（km）</label><input type="number" data-f="longest"></div>
+          <div class="field"><label>体重（kg・任意）</label><input type="number" data-f="weight" placeholder="結果シートには出ません"></div>
+        </div>
+        <p class="subh">シューズと走り方</p>
+        <div class="grid2">
+          <div class="field"><label>普段のレース用シューズ</label><input type="text" data-f="usualRace"></div>
+          <div class="field"><label>普段の練習用シューズ</label><input type="text" data-f="usualTrain"></div>
+          <div class="field"><label>MS4/MS5の使用経験と感想</label><input type="text" data-f="msExp"></div>
+          <div class="field"><label>走り方の好み</label><select data-f="style"><option value="">—</option><option value="roll">転がして進みたい</option><option value="push">自分で踏んで回したい</option><option value="unknown">分からない</option></select></div>
+          <div class="field"><label>自分の着地タイプ（自己申告）</label><select data-f="selfStrike"><option value="">—</option><option value="heel">かかと</option><option value="mid">真ん中</option><option value="fore">つま先</option><option value="unknown">分からない</option></select></div>
+          <div class="field"><label>カーボンプレートシューズの経験</label><select data-f="carbon"><option value="">—</option><option value="yes">あり</option><option value="no">なし</option></select></div>
+          <div class="field"><label>足のサイズ</label><input type="text" data-f="size" placeholder="27.0"></div>
+          <div class="field"><label>足の幅</label><select data-f="width"><option value="">—</option><option value="narrow">細め</option><option value="normal">普通</option><option value="wide">幅広</option></select></div>
+        </div>
+        <label class="chk"><input type="checkbox" data-f="msLegTired">MS4/MS5でフルを走った後に脚が残った経験がある</label>
+        <label class="chk"><input type="checkbox" data-f="highInstep">甲が高い・足が厚い</label>
+        <div class="field"><label>悩み・メモ</label><textarea rows="2" data-f="concern"></textarea></div>
+        <p class="presum">撮影の順番（おすすめ）：<b id="evOrder"></b></p>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>当日の解析（2足 × 歩数）</h2><div class="legend"><span><i class="sw a"></i><span class="shoeA-name"></span>（実線）</span><span><i class="sw b"></i><span class="shoeB-name"></span>（破線）</span></div></div>
+        <div class="row strike-row"><span id="evStrikeAuto" class="presum"></span>
+          <label class="sb-p">着地タイプ <select id="evStrikeManual"><option value="">動画の判定を使う</option><option value="heel">かかと着地</option><option value="mid">中足部着地</option><option value="fore">前足部着地</option></select></label></div>
+        <label class="chk"><input type="checkbox" data-f="pronation">後ろからの撮影で内倒れが大きい（任意）</label>
+        <p class="hint" id="evNoResult">「解析」タブで動画を1歩ずつ解析し、「この歩を追加」でこの参加者に保存してください。1足あたり5歩以上が目安です。</p>
+        <div id="evCompare" hidden>
+          <div class="ev-cmp">
+            <table class="ev-table" id="evTable"></table>
+            <canvas id="evBars" aria-label="部位ごとの最大圧縮率の平均の比較"></canvas>
+          </div>
+          <p class="hint" id="evMm"></p>
+          <div class="ev-curves" id="evCurves">
+            <div><h3 style="--c:var(--heel)">ヒール</h3><canvas></canvas></div>
+            <div><h3 style="--c:var(--mid)">ミッド</h3><canvas></canvas></div>
+            <div><h3 style="--c:var(--fore)">フォア</h3><canvas></canvas></div>
+          </div>
+          <div class="ev-steps">
+            <div><h3><i class="sw a"></i><span class="shoeA-name"></span>：歩ごとの最大（ヒール / ミッド / フォア）</h3><ul class="steplist" id="evSteps0"></ul></div>
+            <div><h3><i class="sw b"></i><span class="shoeB-name"></span>：歩ごとの最大（ヒール / ミッド / フォア）</h3><ul class="steplist" id="evSteps1"></ul></div>
+          </div>
+          <p class="hint">値は歩ごとの最大圧縮率の平均±標準偏差です。差が3ポイント未満は測定誤差の範囲と考えてください。</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>主観評価（走った直後に5段階）</h2>
+        <div class="ev-feel">
+          <div><h3><i class="sw a"></i><span class="shoeA-name"></span></h3><div id="evRate0"></div><div class="field"><label for="evComment0">感想</label><textarea id="evComment0" rows="2"></textarea></div></div>
+          <div><h3><i class="sw b"></i><span class="shoeB-name"></span></h3><div id="evRate1"></div><div class="field"><label for="evComment1">感想</label><textarea id="evComment1" rows="2"></textarea></div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>本人が良かったと感じたシューズ（推定との照合用）</h2>
+        <div class="seg3" id="evChoice" role="group" aria-label="選んだシューズ"><button type="button" data-v="0">A</button><button type="button" data-v="1">B</button><button type="button" data-v="none">決められない</button></div>
+        <div class="field"><label for="evReason">理由</label><textarea id="evReason" rows="2"></textarea></div>
+        <div class="row"><button class="btn danger" id="evDelete">この参加者を削除</button></div>
+      </div>
+    </div>
+  </div>
+</section>
 <script src="core.js"></script>
 <script src="app.js"></script>
+<script src="event.js"></script>
 </body>
 </html>
