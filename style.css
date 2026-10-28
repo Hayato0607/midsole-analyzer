@@ -220,4 +220,24 @@ details.cfg summary{cursor:pointer;font-weight:600}
 .sheet-note{font-size:12.5px;color:var(--muted);margin:10px 0 0}
 .sheet-missing{color:var(--muted);margin:4px 0}
 @media (max-width:620px){.dists{grid-template-columns:repeat(3,minmax(0,1fr))}.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.strike-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px 24px;margin:4px 0 2px}
+.strike-grid>div{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.sg-name{font-size:13px;font-weight:600;flex-basis:100%}
+.sg-auto{font-size:13px;color:var(--muted);flex:1 1 auto}
+.apt-wrap{overflow-x:auto}
+.apt-table{width:100%;border-collapse:collapse;font-size:14px;min-width:420px}
+.apt-table th,.apt-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+.apt-table thead th{font-size:12.5px;color:var(--muted);font-weight:500}
+.apt-table tbody th{font-weight:600;width:4.5em}
+.apt-table td.num{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:17px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.apt{display:inline-block;font-family:"Barlow Condensed",system-ui,sans-serif;font-variant-numeric:tabular-nums;font-weight:600;font-size:20px;padding:0 8px;border-radius:6px;line-height:1.5}
+.apt small{font-size:12px;margin-left:1px}
+.apt.hi{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.apt.ok{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+.apt.lo{color:var(--muted)}
+.apt-legend{font-size:12.5px;color:var(--muted);margin:8px 0 0}
+.apt-legend .apt{font-size:13px;margin-right:4px}
+.rec{font-weight:600}
+.rec.A{color:var(--shoeA)}.rec.B{color:var(--shoeB)}.rec.either{color:var(--muted);font-weight:500}
 @media print{header.top,.tabs,#viewAnalysis,.ev-side,#evDetail>.panel:not(#evSheetPanel),.no-print{display:none!important}#viewEvent{display:block!important;padding:0}.panel{border:0;background:#fff}body{background:#fff;color:#000}}

@@ -23,6 +23,7 @@
     <div class="savebar" id="evSavebar">
       <label class="sb-p">保存先 <select id="evSaveP" aria-label="保存先の参加者"></select></label>
       <div class="seg2" id="evShoeSeg" role="group" aria-label="シューズ"><button type="button" aria-pressed="true">A</button><button type="button" aria-pressed="false">B</button></div>
+      <div class="seg2" id="evPaceSeg" role="group" aria-label="撮影ペース"><button type="button" data-p="race" aria-pressed="true">レースペース</button><button type="button" data-p="10k" aria-pressed="false">10Kペース</button></div>
       <button class="btn primary" id="evSave" disabled>この歩を追加</button>
       <p class="status sb-status" id="evSaveStatus"></p>
     </div>
@@ -129,31 +130,30 @@
     </div>
     <div class="panel">
       <h2>設定</h2>
-      <div class="field"><label for="evShoeA">シューズA（短い距離向きの想定）</label><input id="evShoeA" type="text"></div>
-      <div class="field"><label for="evShoeB">シューズB（長い距離向きの想定）</label><input id="evShoeB" type="text"></div>
+      <div class="field"><label for="evShoeA">シューズA</label><input id="evShoeA" type="text"></div>
+      <div class="field"><label for="evShoeB">シューズB</label><input id="evShoeB" type="text"></div>
       <div class="field"><label for="evCapFps">撮影fps</label><input id="evCapFps" type="number" min="1" placeholder="例 240"></div>
-      <p class="hint">撮影fpsを入れると、時間をミリ秒で表示します。全員を同じ条件（目標レースペース、同じカメラ位置、240fps以上）で撮影してください。</p>
+      <p class="hint">全員を同じ条件（目標レースペース、ミッドソールの高さで真横、240fps以上）で撮影してください。</p>
       <details class="cfg"><summary>判定の詳細設定</summary>
-        <p class="subh">実測の厚さ（mm、推定圧縮量の計算に使用）</p>
-        <div class="grid3">
-          <div class="field"><label>A ヒール</label><input type="number" step="0.1" data-cfg="refA.0"></div>
-          <div class="field"><label>A ミッド</label><input type="number" step="0.1" data-cfg="refA.1"></div>
-          <div class="field"><label>A フォア</label><input type="number" step="0.1" data-cfg="refA.2"></div>
-          <div class="field"><label>B ヒール</label><input type="number" step="0.1" data-cfg="refB.0"></div>
-          <div class="field"><label>B ミッド</label><input type="number" step="0.1" data-cfg="refB.1"></div>
-          <div class="field"><label>B フォア</label><input type="number" step="0.1" data-cfg="refB.2"></div>
-        </div>
-        <p class="subh">圧縮率の基準値（空欄なら参加者内の上位・下位1/3で判定）</p>
-        <div class="grid2">
-          <div class="field"><label>ルールB：Aの着地部位がこの%以上</label><input type="number" step="0.1" data-cfg="thrB"></div>
-          <div class="field"><label>ルールC：Bの着地部位がこの%以下</label><input type="number" step="0.1" data-cfg="thrC"></div>
-        </div>
+        <p class="subh">校正係数（動画の圧縮率 → 試験機相当）</p>
+        <div class="grid3"><div class="field"><label>ヒール</label><input type="number" step="0.01" data-cfg="cal.0"></div><div class="field"><label>ミッド</label><input type="number" step="0.01" data-cfg="cal.1"></div><div class="field"><label>前足部</label><input type="number" step="0.01" data-cfg="cal.2"></div></div>
+        <p class="hint">動画の圧縮率にこの係数をかけて、下の基準と比べます。1.0のままだと適性度は参考になりません。</p>
+        <p class="subh"><span class="shoeA-name"></span>の基準（%）</p>
+        <div class="grid3"><div class="field"><label>ヒール 下限</label><input type="number" step="1" data-cfg="bandA.heel.0"></div><div class="field"><label>ヒール 目安</label><input type="number" step="1" data-cfg="bandA.heel.1"></div><div class="field"><label>ヒール 上限</label><input type="number" step="1" data-cfg="bandA.heel.2"></div><div class="field"><label>前足部 下限</label><input type="number" step="1" data-cfg="bandA.fore.0"></div><div class="field"><label>前足部 目安</label><input type="number" step="1" data-cfg="bandA.fore.1"></div><div class="field"><label>前足部 上限</label><input type="number" step="1" data-cfg="bandA.fore.2"></div></div>
+        <p class="subh"><span class="shoeB-name"></span>の基準（%）</p>
+        <div class="grid3"><div class="field"><label>ヒール 下限</label><input type="number" step="1" data-cfg="bandB.heel.0"></div><div class="field"><label>ヒール 目安</label><input type="number" step="1" data-cfg="bandB.heel.1"></div><div class="field"><label>ヒール 上限</label><input type="number" step="1" data-cfg="bandB.heel.2"></div><div class="field"><label>前足部 下限</label><input type="number" step="1" data-cfg="bandB.fore.0"></div><div class="field"><label>前足部 目安</label><input type="number" step="1" data-cfg="bandB.fore.1"></div><div class="field"><label>前足部 上限</label><input type="number" step="1" data-cfg="bandB.fore.2"></div></div>
+        <p class="hint">ミッドはヒールと前足部の平均を使います。</p>
+        <p class="subh">反発係数K・保護係数P</p>
+        <div class="grid4"><div class="field"><label>A K ヒール</label><input type="number" step="0.01" data-cfg="kA.heel"></div><div class="field"><label>A K 前足部</label><input type="number" step="0.01" data-cfg="kA.fore"></div><div class="field"><label>A P ヒール</label><input type="number" step="0.01" data-cfg="pA.heel"></div><div class="field"><label>A P 前足部</label><input type="number" step="0.01" data-cfg="pA.fore"></div><div class="field"><label>B K ヒール</label><input type="number" step="0.01" data-cfg="kB.heel"></div><div class="field"><label>B K 前足部</label><input type="number" step="0.01" data-cfg="kB.fore"></div><div class="field"><label>B P ヒール</label><input type="number" step="0.01" data-cfg="pB.heel"></div><div class="field"><label>B P 前足部</label><input type="number" step="0.01" data-cfg="pB.fore"></div></div>
+        <p class="subh">実測の厚さ（mm、品質チェック用）</p>
+        <div class="grid3"><div class="field"><label>A ヒール</label><input type="number" step="0.1" data-cfg="refA.0"></div><div class="field"><label>A ミッド</label><input type="number" step="0.1" data-cfg="refA.1"></div><div class="field"><label>A 前足部</label><input type="number" step="0.1" data-cfg="refA.2"></div><div class="field"><label>B ヒール</label><input type="number" step="0.1" data-cfg="refB.0"></div><div class="field"><label>B ミッド</label><input type="number" step="0.1" data-cfg="refB.1"></div><div class="field"><label>B 前足部</label><input type="number" step="0.1" data-cfg="refB.2"></div></div>
         <p class="subh">注意フラグのしきい値</p>
         <div class="grid3">
           <div class="field"><label>ペース（キロ）</label><input type="text" data-cfg="paceFlag"></div>
           <div class="field"><label>速いランナー（フル換算）</label><input type="text" data-cfg="fastFull"></div>
-          <div class="field"><label>月間走行距離が少ない（km未満）</label><input type="number" data-cfg="lowMileage"></div>
+          <div class="field"><label>月間走行距離（km未満）</label><input type="number" data-cfg="lowMileage"></div>
         </div>
+        <div class="row"><button class="btn small" id="evCfgReset">基準値と係数を企画書の値に戻す</button></div>
       </details>
     </div>
     <div class="panel">
@@ -170,7 +170,7 @@
     <div class="panel ev-none" id="evNone"><p>参加者を追加すると、事前入力・解析結果・推定結果がここに表示されます。</p><button class="btn primary" id="evAdd2">＋ 参加者を追加</button></div>
     <div id="evDetail" hidden>
       <div class="panel" id="evSheetPanel">
-        <div class="panel-head"><h2>結果シート：距離ごとの使い分けの目安</h2><button class="btn small no-print" id="evPrint">印刷</button></div>
+        <div class="panel-head"><h2>結果シート：距離ごとの適性度とおすすめ</h2><button class="btn small no-print" id="evPrint">印刷</button></div>
         <div id="evSheet"></div>
       </div>
       <div class="panel">
@@ -200,28 +200,22 @@
           <div class="field"><label>練習での最長距離（km）</label><input type="number" data-f="longest"></div>
           <div class="field"><label>体重（kg・任意）</label><input type="number" data-f="weight" placeholder="結果シートには出ません"></div>
         </div>
-        <p class="subh">シューズと走り方</p>
-        <div class="grid2">
-          <div class="field"><label>普段のレース用シューズ</label><input type="text" data-f="usualRace"></div>
-          <div class="field"><label>普段の練習用シューズ</label><input type="text" data-f="usualTrain"></div>
-          <div class="field"><label>MS4/MS5の使用経験と感想</label><input type="text" data-f="msExp"></div>
-          <div class="field"><label>走り方の好み</label><select data-f="style"><option value="">—</option><option value="roll">転がして進みたい</option><option value="push">自分で踏んで回したい</option><option value="unknown">分からない</option></select></div>
-          <div class="field"><label>自分の着地タイプ（自己申告）</label><select data-f="selfStrike"><option value="">—</option><option value="heel">かかと</option><option value="mid">真ん中</option><option value="fore">つま先</option><option value="unknown">分からない</option></select></div>
-          <div class="field"><label>カーボンプレートシューズの経験</label><select data-f="carbon"><option value="">—</option><option value="yes">あり</option><option value="no">なし</option></select></div>
+        <p class="subh">足</p>
+        <div class="grid4">
           <div class="field"><label>足のサイズ</label><input type="text" data-f="size" placeholder="27.0"></div>
-          <div class="field"><label>足の幅</label><select data-f="width"><option value="">—</option><option value="narrow">細め</option><option value="normal">普通</option><option value="wide">幅広</option></select></div>
         </div>
-        <label class="chk"><input type="checkbox" data-f="msLegTired">MS4/MS5でフルを走った後に脚が残った経験がある</label>
         <label class="chk"><input type="checkbox" data-f="highInstep">甲が高い・足が厚い</label>
         <div class="field"><label>悩み・メモ</label><textarea rows="2" data-f="concern"></textarea></div>
         <p class="presum">撮影の順番（おすすめ）：<b id="evOrder"></b></p>
       </div>
       <div class="panel">
         <div class="panel-head"><h2>当日の解析（2足 × 歩数）</h2><div class="legend"><span><i class="sw a"></i><span class="shoeA-name"></span>（実線）</span><span><i class="sw b"></i><span class="shoeB-name"></span>（破線）</span></div></div>
-        <div class="row strike-row"><span id="evStrikeAuto" class="presum"></span>
-          <label class="sb-p">着地タイプ <select id="evStrikeManual"><option value="">動画の判定を使う</option><option value="heel">かかと着地</option><option value="mid">中足部着地</option><option value="fore">前足部着地</option></select></label></div>
+        <div class="strike-grid">
+          <div><span class="sg-name"><i class="sw a"></i><span class="shoeA-name"></span>の接地タイプ</span><span class="sg-auto" id="evStrikeAuto0"></span><select id="evStrike0" aria-label="接地タイプ（A）"><option value="">動画の判定を使う</option><option value="rear">リア接地</option><option value="mid">ミッド接地</option><option value="fore">フォア接地</option></select></div>
+          <div><span class="sg-name"><i class="sw b"></i><span class="shoeB-name"></span>の接地タイプ</span><span class="sg-auto" id="evStrikeAuto1"></span><select id="evStrike1" aria-label="接地タイプ（B）"><option value="">動画の判定を使う</option><option value="rear">リア接地</option><option value="mid">ミッド接地</option><option value="fore">フォア接地</option></select></div>
+        </div>
         <label class="chk"><input type="checkbox" data-f="pronation">後ろからの撮影で内倒れが大きい（任意）</label>
-        <p class="hint" id="evNoResult">「解析」タブで動画を1歩ずつ解析し、「この歩を追加」でこの参加者に保存してください。1足あたり5歩以上が目安です。</p>
+        <p class="hint" id="evNoResult">「解析」タブで動画を1歩ずつ解析し、「この歩を追加」でこの参加者に保存してください。1足あたり5歩以上が目安です。時間が取れれば、10Kペースの撮影も「10Kペース」で追加すると、5K・10Kの計算に使います。</p>
         <div id="evCompare" hidden>
           <div class="ev-cmp">
             <table class="ev-table" id="evTable"></table>
@@ -237,14 +231,6 @@
             <div><h3><i class="sw a"></i><span class="shoeA-name"></span>：歩ごとの最大（ヒール / ミッド / フォア）</h3><ul class="steplist" id="evSteps0"></ul></div>
             <div><h3><i class="sw b"></i><span class="shoeB-name"></span>：歩ごとの最大（ヒール / ミッド / フォア）</h3><ul class="steplist" id="evSteps1"></ul></div>
           </div>
-          <p class="hint">値は歩ごとの最大圧縮率の平均±標準偏差です。差が3ポイント未満は測定誤差の範囲と考えてください。</p>
-        </div>
-      </div>
-      <div class="panel">
-        <h2>主観評価（走った直後に5段階）</h2>
-        <div class="ev-feel">
-          <div><h3><i class="sw a"></i><span class="shoeA-name"></span></h3><div id="evRate0"></div><div class="field"><label for="evComment0">感想</label><textarea id="evComment0" rows="2"></textarea></div></div>
-          <div><h3><i class="sw b"></i><span class="shoeB-name"></span></h3><div id="evRate1"></div><div class="field"><label for="evComment1">感想</label><textarea id="evComment1" rows="2"></textarea></div></div>
         </div>
       </div>
       <div class="panel">
