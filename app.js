@@ -1,4 +1,4 @@
-// 画面の動き：動画の読み込み、操作、描画、CSV書き出し
+// 画面の動き：動画の読み込み、接地・離地の指定、解析、描画、CSV書き出し
 (() => {
 'use strict';
 const C = Core;
@@ -8,8 +8,8 @@ const chart = $('#chart'), cctx = chart.getContext('2d');
 const kymoCanvases = [...document.querySelectorAll('.kymo canvas')];
 const gauges = [...document.querySelectorAll('.gauge')];
 const grabCv = document.createElement('canvas'); let gctx = null;
-const NAMES = ['ヒール', 'ミッド', 'フォア'];
-const S = { loaded: false, fps: 30, N: 0, vw: 0, vh: 0, aw: 0, ah: 0, mark: null, start: null, end: null, stations: null, box: null, toeRight: true, A: null, busy: false, drag: null, lam: 0.03, capFps: 0, kymo: [], name: 'video' };
+const NAMES = ['ヒール', 'ミッド', 'フォア'], ZONE_NAMES = NAMES;
+const S = { loaded: false, fps: 30, N: 0, vw: 0, vh: 0, aw: 0, ah: 0, mark: null, start: null, end: null, stations: null, box: null, toeRight: true, A: null, busy: false, drag: null, lam: 0.03, capFps: 0, kymo: [], name: 'video', scale: { mm: null, px: null, p0: null, p1: null, picking: 0 } };
 let colors = [], css = {};
 function readColors() {
   const cs = getComputedStyle(document.documentElement);
@@ -70,6 +70,7 @@ function resetAll() {
   S.loaded = false; S.mark = S.start = S.end = null; S.stations = null; S.box = null; S.A = null; S.kymo = [];
   say('#detectStatus', ''); say('#runStatus', ''); say('#rangeStatus', ''); say('#baseStatus', ''); say('#csvStatus', '');
   $('#csvBox').hidden = true;
+  S.scale = { mm: S.scale ? S.scale.mm : null, px: null, p0: null, p1: null, picking: 0 }; say('#scaleStatus', '');
 }
 
 // ---------- frame access ----------
@@ -104,10 +105,15 @@ function onStationsChanged(msg, warn) {
   say('#runStatus', ''); say('#baseStatus', '');
   updateUI(); drawAll();
 }
+function markerMsg(st) {
+  const m = st && st.markers; if (!m) return '';
+  const n = m.used.filter(Boolean).length;
+  if (!m.found.length) return '赤いテープは見つからなかったので、測定点を靴の長さの15%・42%・68%に置きました。';
+  return `赤いテープを${m.found.length}か所見つけ、${n}か所の測定点をテープのすぐ横に合わせました。${n < 3 ? '見つからなかった部位は、靴の長さの割合で置いています。' : ''}`;
+}
 function defaultRange() {
-  S.start = Math.max(0, S.mark - Math.round(S.fps * 0.3));
-  S.end = Math.min(S.N - 1, S.mark + Math.round(S.fps * 1.4));
-  say('#rangeStatus', '');
+  S.start = null; S.end = null;
+  say('#rangeStatus', '接地した瞬間と離地した瞬間を指定してください。接地の瞬間が無負荷の基準になります。');
 }
 async function detect() {
   if (!S.loaded || S.busy) return;
@@ -127,7 +133,7 @@ async function detect() {
     S.stations = C.placeStations(cur, det.box, det.toeRight);
     defaultRange();
     const clipMsg = det.clipped ? `靴の${det.clipped === 'left' ? '左' : '右'}端が画面の外にかかっているため、測定位置がずれることがあります。靴全体が写るフレームで検出し直すと正確になります。` : '';
-    onStationsChanged(`検出しました（つま先は${S.toeRight ? '右' : '左'}向き）。${clipMsg || '点の位置が境目に合っているか確認してください。'}`, !!det.clipped);
+    onStationsChanged(`検出しました（つま先は${S.toeRight ? '右' : '左'}向き）。${markerMsg(S.stations)}${clipMsg || '点の位置が境目に合っているか確認してください。'}`, !!det.clipped);
   } catch (e) {
     S.busy = false; say('#detectStatus', `検出に失敗しました：${e.message}`, 'warn'); updateUI();
   }
@@ -176,7 +182,8 @@ async function analyze() {
     S.A = A;
     solveAll(); buildKymos(); afterSolve();
     const lost = tf.frames.concat(tb ? tb.frames : []).filter(f => f.nInliers < 4).length;
-    say('#runStatus', `完了しました（${A.timeline.size}フレーム、${((performance.now() - t0) / 1000).toFixed(1)}秒）。${lost ? `靴全体の追跡が不安定なフレームが${lost}あります。` : ''}`, lost ? 'warn' : 'ok');
+    const q = qualityOf(A), qLow = q.some(v => v < 0.8);
+    say('#runStatus', `完了しました（${A.timeline.size}フレーム、${((performance.now() - t0) / 1000).toFixed(1)}秒）。品質（有効フレームの割合）：${ZONE_NAMES.map((z, k) => `${z} ${Math.round(q[k] * 100)}%`).join('・')}。${lost ? `靴全体の追跡が不安定なフレームが${lost}あります。` : ''}${qLow ? '80%未満の部位があるため、体験会の判定では品質ゲートにかかることがあります。' : ''}`, (lost || qLow) ? 'warn' : 'ok');
     say('#stageNote', '');
     await seekTo(0);
   } catch (e) {
@@ -199,13 +206,13 @@ function afterSolve() {
     for (const fi of A.timeline.keys()) { const r = resAt(k, fi); if (r && r.valid && Math.abs(fi - A.base) < bd) { bd = Math.abs(fi - A.base); best = r.h; } }
     return best || m.h0;
   });
-  A.heelOff = A.first + Math.ceil((A.last - A.first + 1) / 2);
+  A.heelOff = A.first + Math.round(0.7 * (A.last - A.first));
   A.peak = A.meta.map((m, k) => {
     let pk = null;
     for (const fi of A.timeline.keys()) { const v = compAt(k, fi); if (v !== null && (!pk || v > pk.v)) pk = { v, fi }; }
     return pk;
   });
-  say('#baseStatus', `無負荷の基準は f${A.base + 1}。`);
+  say('#baseStatus', `無負荷の基準は接地の瞬間（f${A.base + 1}）です。`);
   drawAll();
 }
 function stationGeom(k, fi) {
@@ -273,6 +280,7 @@ function drawOverlay() {
   const [cw, ch] = sizeCanvas(overlay, octx);
   if (!S.loaded) return;
   const r = dispRect(), fi = curIdx();
+  if (S.scale.p0) { const a = toD(r, S.scale.p0), b = S.scale.p1 ? toD(r, S.scale.p1) : a; octx.save(); octx.setLineDash([4, 3]); octx.strokeStyle = '#fff'; octx.lineWidth = 1.5; octx.beginPath(); octx.moveTo(a[0], a[1]); octx.lineTo(b[0], b[1]); octx.stroke(); octx.setLineDash([]); octx.fillStyle = '#fff'; [a, b].forEach(q => { octx.beginPath(); octx.arc(q[0], q[1], 4, 0, Math.PI * 2); octx.fill(); }); octx.restore(); }
   if (S.A) {
     if (!S.A.timeline.has(fi)) return;
     for (let k = 0; k < 3; k++) {
@@ -288,6 +296,7 @@ function drawOverlay() {
   } else if (S.stations) {
     const editable = fi === S.mark;
     octx.globalAlpha = editable ? 1 : 0.4;
+    if (editable && S.stations.markers) S.stations.markers.found.forEach(c => c.ys.forEach(y => { const q = toD(r, [c.x, y]); octx.save(); octx.setLineDash([3, 3]); octx.strokeStyle = '#fff'; octx.lineWidth = 1.5; octx.beginPath(); octx.arc(q[0], q[1], c.r * r.K + 5, 0, Math.PI * 2); octx.stroke(); octx.restore(); }));
     S.stations.forEach((st, k) => {
       const a = toD(r, st.top), b = toD(r, st.bot);
       seg(octx, a, b, colors[k], 2.5);
@@ -394,20 +403,20 @@ function drawLabels() {
   }
   $('#rStart').textContent = S.start === null ? '—' : `f${S.start + 1}`;
   $('#rMark').textContent = S.mark === null ? '—' : `f${S.mark + 1}`;
-  $('#rEnd').textContent = S.end === null ? '—' : `f${S.end + 1}（${S.end - S.start + 1}フレーム）`;
+  $('#rEnd').textContent = S.end === null ? '—' : `f${S.end + 1}`;
 }
 function drawAll() { drawOverlay(); drawReadouts(); drawChart(); drawKymos(); drawLabels(); }
 function updateUI() {
   const L = S.loaded && !S.busy, St = !!S.stations && !S.busy, A = !!S.A && !S.busy;
   ['#prev', '#play', '#next', '#scrub'].forEach(s => { $(s).disabled = !S.loaded || S.busy; });
   $('#detect').disabled = !L; $('#flip').disabled = !St || !!S.A;
-  $('#setStart').disabled = !St; $('#setEnd').disabled = !St; $('#run').disabled = !St;
-  ['#setBase', '#smooth', '#clearCons', '#csv', '#rangeOnly'].forEach(s => { $(s).disabled = !A; });
-  $('#pick').disabled = S.busy;
+  $('#setStart').disabled = !St; $('#setEnd').disabled = !St; $('#run').disabled = !St || S.start === null || S.end === null;
+  ['#smooth', '#clearCons', '#csv', '#rangeOnly'].forEach(s => { $(s).disabled = !A; });
+  $('#pick').disabled = S.busy; $('#scalePick').disabled = !S.loaded || S.busy;
   const state = (done, active) => done ? 'done' : (active ? 'active' : '');
   $('#s1').dataset.state = state(S.loaded, true);
   $('#s2').dataset.state = state(!!S.stations, S.loaded);
-  $('#s3').dataset.state = state(!!S.stations && S.start !== null, !!S.stations);
+  $('#s3').dataset.state = state(!!S.stations && S.start !== null && S.end !== null, !!S.stations);
   $('#s4').dataset.state = state(!!S.A, !!S.stations);
   $('#s5').dataset.state = state(false, !!S.A);
   window.dispatchEvent(new Event('msa:update'));
@@ -467,27 +476,37 @@ $('#fps').addEventListener('change', e => {
 });
 $('#detect').addEventListener('click', detect);
 $('#flip').addEventListener('click', flip);
+function rangeMsg() {
+  if (S.start === null || S.end === null) { say('#rangeStatus', '接地した瞬間と離地した瞬間を両方指定すると解析できます。'); return; }
+  const n = S.end - S.start, ms = S.capFps ? `（${(n / S.capFps * 1000).toFixed(0)} ms）` : '';
+  say('#rangeStatus', `接地時間 ${n}フレーム${ms}。接地の瞬間（f${S.start + 1}）を無負荷の基準にします。`, 'ok');
+}
 $('#setStart').addEventListener('click', () => {
   const i = curIdx();
-  if (i > S.mark) { say('#rangeStatus', `開始はマークしたフレーム（f${S.mark + 1}）以前にしてください。`, 'warn'); return; }
-  S.start = i; S.A = null; say('#rangeStatus', ''); updateUI(); drawAll();
+  if (S.mark !== null && i > S.mark) { say('#rangeStatus', `接地はマークしたフレーム（f${S.mark + 1}）以前にしてください。`, 'warn'); return; }
+  if (S.end !== null && i >= S.end) { say('#rangeStatus', '接地は離地より前にしてください。', 'warn'); return; }
+  S.start = i; S.A = null; rangeMsg(); updateUI(); drawAll();
 });
 $('#setEnd').addEventListener('click', () => {
   const i = curIdx();
-  if (i < S.mark) { say('#rangeStatus', `終了はマークしたフレーム（f${S.mark + 1}）以降にしてください。`, 'warn'); return; }
-  S.end = i; S.A = null; say('#rangeStatus', ''); updateUI(); drawAll();
+  if (S.mark !== null && i < S.mark) { say('#rangeStatus', `離地はマークしたフレーム（f${S.mark + 1}）以降にしてください。`, 'warn'); return; }
+  if (S.start !== null && i <= S.start) { say('#rangeStatus', '離地は接地より後にしてください。', 'warn'); return; }
+  S.end = i; S.A = null; rangeMsg(); updateUI(); drawAll();
 });
 $('#run').addEventListener('click', analyze);
-$('#setBase').addEventListener('click', () => {
-  const i = curIdx(); if (!S.A || !S.A.timeline.has(i)) { say('#baseStatus', '解析範囲内のフレームを表示してから押してください。', 'warn'); return; }
-  S.A.base = i; afterSolve();
-});
 $('#smooth').addEventListener('input', e => {
   const v = +e.target.value / 100; S.lam = 0.006 + Math.pow(v, 1.6) * 0.1;
   if (S.A) { solveAll(); afterSolve(); }
 });
 $('#capfps').addEventListener('input', e => { S.capFps = +e.target.value > 0 ? +e.target.value : 0; drawAll(); });
 $('#clearCons').addEventListener('click', () => { if (!S.A) return; S.A.halves.forEach(H => H.cons.forEach(c => c.clear())); solveAll(); afterSolve(); say('#runStatus', '手動の補正を消しました。'); });
+function scaleMsg() {
+  const sc = S.scale;
+  if (sc.px && sc.mm) say('#scaleStatus', `${sc.mm} mm = ${sc.px.toFixed(1)} px（1 px ≒ ${(sc.mm / sc.px).toFixed(3)} mm）。次の解析から厚さをmmでも記録します。`, 'ok');
+  else if (sc.px) say('#scaleStatus', `目印の長さは ${sc.px.toFixed(1)} px です。長さ（mm）を入れてください。`);
+}
+$('#scalePick').addEventListener('click', () => { if (!S.loaded) return; video.pause(); S.scale.picking = 1; S.scale.p0 = S.scale.p1 = null; S.scale.px = null; say('#scaleStatus', '目印の一方の端をクリックしてください。'); drawOverlay(); });
+$('#scaleMm').addEventListener('input', e => { S.scale.mm = +e.target.value > 0 ? +e.target.value : null; scaleMsg(); });
 function buildCSV() {
   const A = S.A, head = ['frame', 'time_s'];
   if (S.capFps) head.push('real_ms_from_baseline');
@@ -529,6 +548,12 @@ $('#csv').addEventListener('click', async () => {
 function evPoint(ev) { const r = dispRect(), b = overlay.getBoundingClientRect(); return { r, p: toA(r, ev.clientX - b.left, ev.clientY - b.top) }; }
 overlay.addEventListener('pointerdown', ev => {
   if (!S.loaded || S.busy) return;
+  if (S.scale.picking) {
+    const { p } = evPoint(ev);
+    if (S.scale.picking === 1) { S.scale.p0 = p; S.scale.p1 = null; S.scale.picking = 2; say('#scaleStatus', 'もう一方の端をクリックしてください。'); }
+    else { S.scale.p1 = p; S.scale.picking = 0; S.scale.px = Math.hypot(p[0] - S.scale.p0[0], p[1] - S.scale.p0[1]); scaleMsg(); }
+    drawOverlay(); return;
+  }
   const { r, p } = evPoint(ev), fi = curIdx(), hit = 18 / r.K;
   const near = q => Math.hypot(q[0] - p[0], q[1] - p[1]) < hit;
   if (S.A) {
@@ -562,7 +587,7 @@ overlay.addEventListener('pointerup', () => {
     if (x1 - x0 > 24 && y1 - y0 > 6) {
       S.box = { x0, y0, x1, y1 }; S.mark = curIdx();
       S.stations = C.placeStations(grabNow(), S.box, S.toeRight); defaultRange();
-      onStationsChanged(`枠の中でミッドソールの上端・下端に合わせました（つま先は${S.toeRight ? '右' : '左'}向き）。`);
+      onStationsChanged(`枠の中でミッドソールの上端・下端に合わせました（つま先は${S.toeRight ? '右' : '左'}向き）。${markerMsg(S.stations)}`);
     }
   } else if (d.kind === 'pt') { if (d.moved) onStationsChanged('点を動かしました。'); }
   else if (d.kind === 'cons' && d.p) applyConstraint(d);
@@ -607,6 +632,7 @@ async function saveText(filename, text) {
   }
   try { await navigator.clipboard.writeText(text); return 'clipboard'; } catch (e) { return 'fail'; }
 }
+function qualityOf(A) { return A.meta.map((m, k) => { let n = 0, ok = 0; for (let fi = A.first; fi <= A.last; fi++) { const r = resAt(k, fi); if (!r) continue; n++; if (r.valid) ok++; } return n ? ok / n : 0; }); }
 function snapshot() {
   const A = S.A; if (!A || S.busy) return null;
   const frames = []; for (let fi = A.first; fi <= A.last; fi++) if (A.timeline.has(fi)) frames.push(fi);
@@ -618,6 +644,8 @@ function snapshot() {
     raw: [0, 1, 2].map(k => frames.map(fi => pct(compRaw(k, fi)))),
     thick: [0, 1, 2].map(k => frames.map(fi => { const r = resAt(k, fi); return r ? +r.h.toFixed(2) : null; })),
     peak: A.peak.map(p => p ? { v: +(p.v * 100).toFixed(2), f: p.fi - A.base } : null),
+    vw: S.vw, vh: S.vh, quality: qualityOf(A).map(v => +v.toFixed(3)), h0: A.hb.map(v => +v.toFixed(2)),
+    mmPerPx: S.scale && S.scale.mm && S.scale.px ? +(S.scale.mm / S.scale.px).toFixed(5) : null,
     savedAt: new Date().toISOString()
   };
 }

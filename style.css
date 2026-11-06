@@ -189,7 +189,7 @@ details.cfg summary{cursor:pointer;font-weight:600}
 .ev-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px 24px;margin-top:14px}
 .ev-steps h3{font-size:13px;font-weight:600;margin:0 0 4px}
 .steplist{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:13px}
-.steplist li{display:grid;grid-template-columns:1.4em auto auto minmax(0,1fr) auto;gap:8px;align-items:center}
+.steplist li{display:grid;grid-template-columns:2.4em auto auto minmax(0,1fr) auto;gap:8px;align-items:center}
 .steplist .sn,.steplist .ss,.steplist .sf{color:var(--muted)}
 .steplist .ss,.steplist .sf{font-size:12px}
 .steplist .sv{font-variant-numeric:tabular-nums}
@@ -240,4 +240,48 @@ details.cfg summary{cursor:pointer;font-weight:600}
 .apt-legend .apt{font-size:13px;margin-right:4px}
 .rec{font-weight:600}
 .rec.A{color:var(--shoeA)}.rec.B{color:var(--shoeB)}.rec.either{color:var(--muted);font-weight:500}
-@media print{header.top,.tabs,#viewAnalysis,.ev-side,#evDetail>.panel:not(#evSheetPanel),.no-print{display:none!important}#viewEvent{display:block!important;padding:0}.panel{border:0;background:#fff}body{background:#fff;color:#000}}
+
+.home{max-width:1180px;margin:0 auto;padding:12px 20px 40px}
+.home[hidden]{display:none}
+.home-hero h2{font-size:20px}
+.home-hero p{font-size:15px;margin:8px 0 4px}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 16px}
+.home h3{margin:0 0 4px;font-size:15px}
+.home ul,.home ol{padding-left:1.25em;margin:6px 0 0;font-size:14px}
+.home li{margin-bottom:5px}
+.verdict{border-radius:10px;padding:14px 16px;border:1.5px solid var(--line);margin:4px 0 8px;background:var(--surface-2)}
+.verdict .v-main{display:block;font-size:21px;font-weight:600;line-height:1.4}
+.verdict .v-sub{display:block;font-size:13.5px;color:var(--muted);margin-top:2px}
+.verdict.A{border-color:var(--shoeA);background:color-mix(in srgb,var(--shoeA) 9%,var(--surface-2))}
+.verdict.A .v-main{color:var(--shoeA)}
+.verdict.B{border-color:var(--shoeB);background:color-mix(in srgb,var(--shoeB) 9%,var(--surface-2))}
+.verdict.B .v-main{color:var(--shoeB)}
+.verdict.hold{border-style:dashed}
+.conf{font-size:14px;margin:0 0 10px}
+.conf span{display:block;color:var(--muted);font-size:12.5px}
+.sub-table{width:100%;border-collapse:collapse;font-size:14px;min-width:380px}
+.sub-table th,.sub-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+.sub-table thead th{font-size:12.5px;color:var(--muted);font-weight:500}
+.sub-table tbody th{font-weight:600}
+.sub-table tbody th .t{display:block;font-size:11.5px;color:var(--muted);font-weight:400}
+.sbar{display:inline-block;width:110px;max-width:40vw;height:8px;border-radius:4px;background:color-mix(in srgb,var(--ink) 9%,transparent);vertical-align:middle;margin-right:8px;overflow:hidden}
+.sbar i{display:block;height:100%}
+td.a .sbar i{background:var(--shoeA)}td.b .sbar i{background:var(--shoeB)}
+.sub-table b.num{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:19px;font-variant-numeric:tabular-nums}
+.sub-table .na{color:var(--muted)}
+.sheet-reasons,.sheet-limits,.sheet-gates{padding-left:1.2em;margin:4px 0 0;font-size:14px}
+.sheet-reasons li,.sheet-limits li,.sheet-gates li{margin-bottom:4px}
+.sheet-limits{color:var(--muted);font-size:13px}
+.sheet-gates li{color:var(--warn)}
+.leg-table{min-width:640px}
+.leg-table small{font-size:11px;color:var(--muted);margin-left:2px}
+.leg-table td.sk{white-space:nowrap;font-size:12.5px}
+.strike-sel{font-size:12.5px;padding:3px 6px;margin-left:4px}
+.q{margin:8px 0 12px}
+.q-label{font-size:13.5px;font-weight:500;margin-bottom:5px}
+.q .seg3 button{font-size:13px;padding:6px 10px}
+.subh2{font-size:13.5px;font-weight:600;margin:16px 0 4px}
+.ml-table{min-width:560px}
+.ml-table small{font-size:11px;color:var(--muted);margin-left:4px}
+.ml-table td.obs{font-size:12.5px}
+@media print{header.top,.tabs,#viewAnalysis,#viewHome,.ev-side,#evDetail>.panel:not(#evSheetPanel),.no-print{display:none!important}#viewEvent{display:block!important;padding:0}.panel{border:0;background:#fff}body{background:#fff;color:#000}}

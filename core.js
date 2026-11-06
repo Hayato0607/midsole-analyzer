@@ -1,4 +1,4 @@
-// 解析コア：自動検出・追跡・厚みの推定（画面に依存しない部分）
+// 解析コア：自動検出・赤いテープの検出・追跡・厚みの推定（画面に依存しない部分）
 // Midsole compression analysis core (framework-free; runs in browser and Node)
 const Core = (() => {
   'use strict';
@@ -601,19 +601,88 @@ const Core = (() => {
     return { xs, top: rmed(pt.map(r => yT + r), half), bot: rmed(pb.map(r => yT + r), half), mu, msW };
   }
 
-  // place 3 stations from a box around the midsole (x0..x1 = shoe length, y0 = midsole top, y1 = bottom)
-  function placeStations(frame, box, toeRight, fr = [0.17, 0.5, 0.8]) {
+  // red tape markers on the midsole sidewall: small, round, clearly red blobs inside the midsole band.
+  // Returns clusters along the shoe (one or two dots per station).
+  function findRedMarkers(frame, box, con) {
+    const { rgba, w, h } = frame, len = box.x1 - box.x0;
+    const ths = con.bot.map((b, i) => b - con.top[i]).sort((p, q) => p - q), th = ths[ths.length >> 1] || (box.y1 - box.y0);
+    const xa = Math.max(0, Math.floor(box.x0 - 0.03 * len)), xb = Math.min(w - 1, Math.ceil(box.x1 + 0.03 * len));
+    const ya = Math.max(0, Math.floor(Math.min(...con.top) - 0.25 * th)), yb = Math.min(h - 1, Math.ceil(Math.max(...con.bot) + 0.1 * th));
+    const W = xb - xa + 1, H = yb - ya + 1;
+    if (W < 5 || H < 5) return [];
+    const m = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const j = ((ya + y) * w + xa + x) * 4, r = rgba[j], mx = Math.max(rgba[j + 1], rgba[j + 2]);
+      if (r > 90 && r - mx > 50 && r > 1.6 * mx) m[y * W + x] = 1;
+    }
+    const lab = new Uint8Array(W * H), blobs = [];
+    const aMin = Math.PI * Math.pow(0.004 * len, 2), aMax = Math.PI * Math.pow(0.03 * len, 2);
+    for (let i = 0; i < W * H; i++) if (m[i] && !lab[i]) {
+      const stack = [i]; lab[i] = 1; let area = 0, sx = 0, sy = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+      while (stack.length) {
+        const c = stack.pop(), cx = c % W, cy = (c / W) | 0; area++; sx += cx; sy += cy;
+        if (cx < x0) x0 = cx; if (cx > x1) x1 = cx; if (cy < y0) y0 = cy; if (cy > y1) y1 = cy;
+        if (cx > 0 && m[c - 1] && !lab[c - 1]) { lab[c - 1] = 1; stack.push(c - 1); }
+        if (cx < W - 1 && m[c + 1] && !lab[c + 1]) { lab[c + 1] = 1; stack.push(c + 1); }
+        if (cy > 0 && m[c - W] && !lab[c - W]) { lab[c - W] = 1; stack.push(c - W); }
+        if (cy < H - 1 && m[c + W] && !lab[c + W]) { lab[c + W] = 1; stack.push(c + W); }
+      }
+      if (area < aMin || area > aMax) continue;
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1, ar = bw / bh;
+      if (ar < 0.4 || ar > 2.5 || area / (bw * bh) < 0.45) continue;
+      const px = xa + sx / area, py = ya + sy / area;
+      const t = interpC(con.xs, con.top, px), bt = interpC(con.xs, con.bot, px), tt = Math.max(4, bt - t);
+      if (py < t - 0.25 * tt || py > bt + 0.1 * tt) continue;
+      blobs.push({ x: px, y: py, r: Math.sqrt(area / Math.PI) });
+    }
+    blobs.sort((p, q) => p.x - q.x);
+    const clusters = [];
+    for (const bl of blobs) {
+      const cl = clusters[clusters.length - 1];
+      if (cl && Math.abs(bl.x - cl.x) < Math.max(2.5 * Math.max(bl.r, cl.r), 0.035 * len)) {
+        cl.items.push(bl); cl.x = cl.items.reduce((a, q) => a + q.x, 0) / cl.items.length; cl.r = Math.max(cl.r, bl.r); cl.ys.push(bl.y);
+      } else clusters.push({ x: bl.x, r: bl.r, ys: [bl.y], items: [bl] });
+    }
+    return clusters.map(c => ({ x: c.x, r: c.r, ys: c.ys }));
+  }
+
+  // place 3 stations from a box around the midsole (x0..x1 = shoe length, y0 = midsole top, y1 = bottom).
+  // Red tape markers, when present, set where along the shoe each station sits.
+  function placeStations(frame, box, toeRight, fr = [0.15, 0.42, 0.68]) {
     const { rgba, w, h } = frame;
     const bw = box.x1 - box.x0, bh = Math.max(4, box.y1 - box.y0);
     const con = soleContours(frame, box.x0, box.x1, { yA: box.y1 - 0.5 * bh, yB: box.y1 + 0.5 * bh, tMin: 0.35 * bh, tMax: 1.7 * bh, tExp: bh, tSig: 0.45 * bh, wPrior: 0.35 });
     const hw = Math.max(2, Math.round(bw * 0.006)), win = Math.max(4, 0.28 * bh);
-    const st = fr.map(f => {
-      const x = toeRight ? box.x0 + f * bw : box.x1 - f * bw;
+    const at = x => {
       let top, bot;
       if (con) { top = interpC(con.xs, con.top, x); bot = interpC(con.xs, con.bot, x); }
       else { top = strongestEdge(rgba, w, h, x, box.y0 - win, box.y0 + win, hw, false); bot = strongestEdge(rgba, w, h, x, box.y1 - win, box.y1 + win, hw, true); }
       return { top: [x, top], bot: [x, Math.max(bot, top + 4)] };
-    });
+    };
+    const st = fr.map(f => at(toeRight ? box.x0 + f * bw : box.x1 - f * bw));
+    st.markers = { found: [], used: [false, false, false] };
+    if (con) {
+      const mk = findRedMarkers(frame, box, con);
+      st.markers.found = mk;
+      if (mk.length) {
+        const fOf = c => toeRight ? (c.x - box.x0) / bw : (box.x1 - c.x) / bw;
+        const sorted = mk.slice().sort((p, q) => fOf(p) - fOf(q));
+        let assign = [null, null, null];
+        if (sorted.length === 3) assign = sorted;
+        else {
+          const free = sorted.slice();
+          fr.forEach((f, k) => { let bi = -1, bd = 0.16; free.forEach((c, j) => { const d = Math.abs(fOf(c) - f); if (d < bd) { bd = d; bi = j; } }); if (bi >= 0) assign[k] = free.splice(bi, 1)[0]; });
+        }
+        const mid = 0.5 * (box.x0 + box.x1);
+        assign.forEach((c, k) => {
+          if (!c) return;
+          // measure just beside the tape so the tape's own edges are not mistaken for the midsole edges
+          const t0 = interpC(con.xs, con.top, c.x), b0 = interpC(con.xs, con.bot, c.x), sw = Math.max(2, Math.round(0.05 * (b0 - t0)));
+          const x = c.x + (Math.sign(mid - c.x) || 1) * (c.r + sw + 3);
+          st[k] = at(x); st.markers.used[k] = true;
+        });
+      }
+    }
     st.contours = con;
     return st;
   }
@@ -788,6 +857,6 @@ const Core = (() => {
     return { box, toeRight, mode, contours: con, clipped, votes, dbg, maskInfo: { bs, gw, gh, mm: Array.from(mm).join('') } };
   }
 
-  return { toGray, Tracker, scoreStation, solveStation, stationMeta, placeStations, autoDetect, apply, scaleOf, featureRegion };
+  return { findRedMarkers, toGray, Tracker, scoreStation, solveStation, stationMeta, placeStations, autoDetect, apply, scaleOf, featureRegion };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
