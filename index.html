@@ -3,61 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ミッドソール圧縮アナライザー</title>
+<title>エアロエリート相性チェック</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="shell">
+<aside class="sidenav" aria-label="メニュー">
+  <div class="brand">
+    <div class="avatar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M14 2.1V10h7.9A8.5 8.5 0 0 0 14 2.1z" opacity=".55"/></svg></div>
+    <div class="brand-txt"><b>Dash AI Lab</b><span class="pill">テスト版</span></div>
+  </div>
+  <div class="event-card"><span class="ec-k">EVENT</span><span class="ec-d num">11.23</span><span class="ec-p">赤羽</span></div>
+  <nav class="side-nav" role="tablist" aria-label="画面の切り替え">
+    <p class="side-label">相性チェック</p>
+    <button type="button" class="nav-item" id="tabHome" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.2 12 4l9 7.2V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>はじめに</span></button>
+    <button type="button" class="nav-item" id="tabAnalysis" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v2h2V7zm0 4v2h2v-2zm0 4v2h2v-2zm12-8v2h2V7zm0 4v2h2v-2zm0 4v2h2v-2zM9 8v8l6-4z"/></svg><span>動画解析</span></button>
+    <button type="button" class="nav-item" id="tabEvent" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M14 2.1V10h7.9A8.5 8.5 0 0 0 14 2.1z" opacity=".55"/></svg><span>相性チェック</span></button>
+  </nav>
+  <p class="side-foot">スケッチャーズ<br>エアロエリート 相性チェック</p>
+</aside>
+<div class="content">
 <header class="top">
-  <h1>ミッドソール圧縮アナライザー</h1>
-  <p>2足をマラソンレースペースで履いて走ったスロー動画から、ミッドソールの変形を比べる「マラソンペース適合プロファイル」です。</p>
+  <h1>エアロエリート相性チェック</h1>
+  <p>スケッチャーズ「エアロエリート」を履いて走ったスロー動画から、ミッドソールの潰れ方を解析し、走りとの相性を点数で示します。</p>
 </header>
-<nav class="tabs" role="tablist" aria-label="画面の切り替え">
-  <button type="button" id="tabHome" role="tab" aria-selected="true">はじめに</button>
-  <button type="button" id="tabAnalysis" role="tab" aria-selected="false">解析</button>
-  <button type="button" id="tabEvent" role="tab" aria-selected="false">体験会・比較</button>
-</nav>
 <section class="home" id="viewHome">
   <div class="panel home-hero">
-    <h2>マラソンペース適合プロファイル</h2>
-    <p>同じランナーが2足のシューズをマラソンレースペースで履いて走ったスロー動画から、ミッドソールの変形を比べて「長時間走で試す第1候補」を示します。差がはっきりしないときは、無理に推奨せず「明確な差なし」や「判定保留」を返します。</p>
-    <div class="row"><button class="btn primary" id="homeStart">体験会を始める</button></div>
+    <h2>潰れ方で、相性がわかる。</h2>
+    <p>スケッチャーズのカーボンプレート搭載レース用シューズ「エアロエリート」を履いて、数秒走ってもらいます。真横から撮ったスロー動画でミッドソールがどこで、どれだけ潰れているかを解析し、その人の走りとエアロエリートの相性を0〜100点で示します。</p>
+    <div class="row"><button class="btn primary" id="homeStart">相性チェックを始める</button></div>
   </div>
   <div class="home-grid">
-    <div class="panel"><h3>流れ</h3><ol>
-      <li>参加者を追加し、目標マラソンペースなどを入力する</li>
-      <li>2足それぞれ、マラソンペースで真横から撮影する（右脚・左脚とも、カメラ側の外側が写るように）</li>
-      <li>「解析」タブで1歩ずつ、接地と離地を指定して解析し、参加者の枠に追加する</li>
-      <li>走った直後に主観評価（2問）を入力する</li>
-      <li>結果（第1候補／明確な差なし／判定保留）と、理由・限界を説明する</li></ol></div>
     <div class="panel"><h3>結果の見方</h3><ul>
-      <li>結果は「長時間走で試す第1候補」「明確な差なし」「判定保留」のどれかです。</li>
-      <li>サブスコアは3つ（クッションの使い方・左右整合性・継続許容性）で、総合点は出しません。</li>
-      <li>判定信頼度は、今回の測定条件では常に「限定的」です。おすすめ度とは別に表示します。</li></ul></div>
-    <div class="panel"><h3>撮影のポイント</h3><ul>
-      <li>カメラはミッドソールの高さで、進行方向に直角に固定する</li>
-      <li>靴全体と接地面が画面に入るようにする（端で切れない）</li>
-      <li>120fps以上、できれば240fps以上で、明るい場所で撮る</li>
-      <li>加速・減速中ではなく、一定ペースで走っている区間を使う</li>
-      <li>右脚と左脚の外側は、カメラを左右に置くか、往復で撮る（すべての動画を同じfps・解像度にする）</li>
-      <li>ミッドソールの外側に赤い丸テープを、かかとから全長の約15%・42%・68%の位置に貼ると、測定点が自動でテープに合う</li>
-      <li>顔が映る場合は、トリミングしてから使う</li></ul></div>
+      <li>相性スコアは「クッションの使い方」「左右のそろい具合」「走った感覚」の重み付き平均です。</li>
+      <li>80点以上は「相性が良い」、60〜79点は「十分使える」、60点未満は「力を引き出しにくい可能性」が目安です。</li>
+      <li>動画の品質が足りないときは、点数を出さずに「スコア保留」とし、撮り直す動画を示します。</li>
+      <li>結果画面は、参加者がその場で動画に撮って構いません。</li></ul></div>
     <div class="panel"><h3>この結果でわからないこと</h3><ul>
-      <li>医学的な診断、故障の予防、過回内・回外の診断はしません。</li>
-      <li>ランニングエコノミー、反発力、エネルギーリターンは評価しません。</li>
-      <li>5km・10kmなど、マラソンペース以外の速度での適性は判断しません。</li>
-      <li>疲労後の変化や、フルマラソン後半のフォームは評価していません。</li>
-      <li>真横から見た見かけの変形からの推定で、判定の基準値は暫定値です。</li></ul></div>
+      <li>医学的な診断ではありません。ケガの予防や記録の向上を保証するものではありません。</li>
+      <li>反発の大きさやランニングエコノミーは評価していません。</li>
+      <li>数秒の走行からの推定で、疲れてきたときやレース後半の走りは見ていません。</li>
+      <li>テスト版のため、判定の基準値と校正係数は暫定値です。</li></ul></div>
   </div>
 </section>
 <main class="layout" id="viewAnalysis">
   <section class="primary">
     <div class="savebar" id="evSavebar">
       <label class="sb-p">保存先 <select id="evSaveP" aria-label="保存先の参加者"></select></label>
-      <div class="seg2" id="evShoeSeg" role="group" aria-label="シューズ"><button type="button" aria-pressed="true">A</button><button type="button" aria-pressed="false">B</button></div>
-      <div class="seg2" id="evSideSeg" role="group" aria-label="脚"><button type="button" data-s="R" aria-pressed="true">右脚</button><button type="button" data-s="L" aria-pressed="false">左脚</button></div>
+      <div class="seg2" id="evSideSeg" role="group" aria-label="足"><button type="button" data-s="R" aria-pressed="true">右足</button><button type="button" data-s="L" aria-pressed="false">左足</button></div>
       <button class="btn primary" id="evSave" disabled>この歩を追加</button>
       <p class="status sb-status" id="evSaveStatus"></p>
     </div>
@@ -111,14 +107,14 @@
       </li>
       <li class="step" id="s2">
         <h3>ミッドソールを指定</h3>
-        <p>靴がブレずにはっきり写っているフレームに移動してから検出します。</p>
+        <p>靴がブレずにはっきり写っているフレームで検出します。解析するときは、足裏全体が地面に着いているフレームで自動的に合わせ直します（点を手で動かした場合は、そのまま使います）。</p>
         <div class="row"><button class="btn" id="detect" disabled>このフレームで自動検出</button><button class="btn" id="flip" disabled>つま先の向きを反転</button></div>
         <p class="hint">うまく合わないときは、動画の上でミッドソールの上端から下端までを囲むようにドラッグしてください。各点はドラッグで動かせます。</p>
         <p class="status" id="detectStatus"></p>
       </li>
       <li class="step" id="s3">
         <h3>接地と離地を指定する</h3>
-        <p>靴が地面に着いた瞬間と、離れた瞬間のフレームを指定します。接地の瞬間が無負荷の基準になります。</p>
+        <p>靴が地面に着いた瞬間と、離れた瞬間のフレームを指定します。接地は、靴底が地面に触れた<b>最初のフレーム</b>にしてください。ヒールは着地から数フレームで大きく潰れるため、接地が数フレーム遅れるとヒールの値が小さく出ます。</p>
         <dl class="range" id="rangeList"><dt>接地</dt><dd id="rStart">—</dd><dt>マーク</dt><dd id="rMark">—</dd><dt>離地</dt><dd id="rEnd">—</dd></dl>
         <div class="row"><button class="btn" id="setStart" disabled>表示中を接地にする</button><button class="btn" id="setEnd" disabled>表示中を離地にする</button></div>
         <p class="status" id="rangeStatus"></p>
@@ -132,10 +128,9 @@
       <li class="step" id="s5">
         <h3>結果を整える</h3>
         <p class="status" id="baseStatus"></p>
-        <div class="row" style="display:block"><label style="display:block">追跡のなめらかさ<input type="range" class="smooth" id="smooth" min="0" max="100" value="40" disabled></label></div>
-        <p class="hint">上げると厚みの細かい揺れを抑え、下げると急な変化に素早く追従します。測定点がずれているフレームでは、点をドラッグして正しい境目に合わせると、その前後の追跡もやり直します。</p>
+        <p class="hint">測定点がずれているフレームでは、点をドラッグして正しい境目に合わせると、その前後の追跡もやり直します。</p>
         <div class="row"><label>撮影fps <input type="number" id="capfps" placeholder="例 240" min="1" max="10000"></label></div>
-        <p class="hint">接地時間をミリ秒で出すのに使います。体験会で保存するには必須です（「体験会・比較」タブの設定と共通）。</p>
+        <p class="hint">接地時間をミリ秒で出すのに使います。参加者に保存するには必須です（「相性チェック」タブの設定と共通）。</p>
         <div class="row"><label>目印の長さ（mm） <input type="number" id="scaleMm" min="1" step="0.1" placeholder="例 100"></label><button class="btn" id="scalePick" disabled>動画上で両端を指定</button></div>
         <p class="status" id="scaleStatus">長さの分かる目印が写っていれば、両端をクリックすると厚さをmmでも記録します（任意）。</p>
         <div class="row"><button class="btn" id="clearCons" disabled>手動の補正をすべて消す</button><button class="btn" id="csv" disabled>CSVを書き出す</button></div>
@@ -149,7 +144,7 @@
         <li>真横から見たミッドソール側面の、見かけの厚みの変化です。カメラの角度、足の内外への傾き、レンズの歪みで数%単位の誤差が出ます。</li>
         <li>厚みが100 pxなら1 pxの誤差が1%に相当します。靴を画面いっぱいに大きく写すほど精度が上がります。</li>
         <li>撮影はカメラを固定し、ソールの高さで真横から。靴底の下に地面が少し写るようにすると、下端が画面外に切れません。明るい場所で撮るとブレが減ります。</li>
-        <li>ミッドソール側面（カメラ側）に赤い丸テープ（直径5〜8mm）を、かかとから靴の全長の約15%・42%・68%の位置に貼っておくと、自動検出のときに測定点をテープのすぐ横に合わせます。テープは上端・下端の境目から少し離して貼ってください。</li>
+        <li>ミッドソール側面（カメラ側）の上端、アッパーとの境目のすぐ下に、赤い丸シール（直径5〜8mm）をかかとから靴の全長の約15%・42%・68%の位置で貼ってください。シールが2つ以上見つかると、シールのすぐ横で、アッパーとの境目から靴底までの厚みを測ります（シールの上では境目が見えないため、横の列で測ります。白いミッドソールや、側面にプリントがある靴でも測る位置を取り違えません）。自動検出は、靴底全体が地面に着いているフレームで押すと正確です。</li>
         <li>無負荷の基準は、指定した接地の瞬間のフレームです。接地の瞬間がブレていると基準の厚みもずれるので、明るい場所で撮影してください。</li>
         <li>基準より厚く見えたフレーム（計算上マイナス）は、画面では0%と表示します。CSVにはマイナスも含めた計算値をそのまま残しています。</li>
         <li>研究用途では、ミッドソール側面の3か所の上下に小さな黒い点を描いておくと、境目がはっきりして追跡が安定します。</li>
@@ -166,26 +161,23 @@
     </div>
     <div class="panel">
       <h2>設定</h2>
-      <div class="field"><label for="evShoeA">シューズA</label><input id="evShoeA" type="text"></div>
-      <div class="field"><label for="evShoeB">シューズB</label><input id="evShoeB" type="text"></div>
+      <div class="field"><label for="evShoe">シューズ</label><input id="evShoe" type="text"></div>
       <div class="grid2">
         <div class="field"><label for="evCapFps">撮影fps（必須）</label><input id="evCapFps" type="number" min="1" placeholder="例 240"></div>
-        <div class="field"><label>片脚あたりの目標歩数</label><input type="number" min="1" step="1" data-cfg="stepsGoal"></div>
+        <div class="field"><label>片足あたりの目標歩数</label><input type="number" min="1" step="1" data-cfg="stepsGoal"></div>
       </div>
-      <p class="hint">全員を同じ条件（マラソンレースペース、ミッドソールの高さで真横、同じfps・解像度）で撮影してください。</p>
       <details class="cfg"><summary>判定の詳細設定（暫定値）</summary>
-        <p class="subh">校正係数（動画の圧縮率 → 試験機相当、2足共通）</p>
+        <p class="subh">校正係数（動画の圧縮率 → 試験機相当）</p>
         <div class="grid3"><div class="field"><label>ヒール</label><input type="number" step="0.01" data-cfg="cal.0"></div><div class="field"><label>ミッド</label><input type="number" step="0.01" data-cfg="cal.1"></div><div class="field"><label>フォア</label><input type="number" step="0.01" data-cfg="cal.2"></div></div>
-        <p class="subh">サブスコアの重み（%）</p>
-        <div class="grid3"><div class="field"><label>クッションの使い方</label><input type="number" step="1" data-cfg="weights.0"></div><div class="field"><label>左右整合性</label><input type="number" step="1" data-cfg="weights.1"></div><div class="field"><label>継続許容性</label><input type="number" step="1" data-cfg="weights.2"></div></div>
-        <p class="subh">判定のしきい値</p>
-        <div class="grid2"><div class="field"><label>基準差（点）</label><input type="number" step="1" data-cfg="unitDiff"></div><div class="field"><label>左右の差がこの%で0点</label><input type="number" step="1" data-cfg="lrZero"></div><div class="field"><label>左右整合性から外す圧縮率（%未満）</label><input type="number" step="0.5" data-cfg="lrMin"></div><div class="field"><label>品質ゲート：有効フレーム（%未満）</label><input type="number" step="1" data-cfg="qualityMin"></div></div>
-        <p class="subh"><span class="shoeA-name"></span>の基準（試験機相当の%）</p>
-        <div class="grid3"><div class="field"><label>ヒール 下限</label><input type="number" step="1" data-cfg="bandA.heel.0"></div><div class="field"><label>ヒール 目安</label><input type="number" step="1" data-cfg="bandA.heel.1"></div><div class="field"><label>ヒール 上限</label><input type="number" step="1" data-cfg="bandA.heel.2"></div><div class="field"><label>フォア 下限</label><input type="number" step="1" data-cfg="bandA.fore.0"></div><div class="field"><label>フォア 目安</label><input type="number" step="1" data-cfg="bandA.fore.1"></div><div class="field"><label>フォア 上限</label><input type="number" step="1" data-cfg="bandA.fore.2"></div></div>
-        <p class="subh"><span class="shoeB-name"></span>の基準（試験機相当の%）</p>
-        <div class="grid3"><div class="field"><label>ヒール 下限</label><input type="number" step="1" data-cfg="bandB.heel.0"></div><div class="field"><label>ヒール 目安</label><input type="number" step="1" data-cfg="bandB.heel.1"></div><div class="field"><label>ヒール 上限</label><input type="number" step="1" data-cfg="bandB.heel.2"></div><div class="field"><label>フォア 下限</label><input type="number" step="1" data-cfg="bandB.fore.0"></div><div class="field"><label>フォア 目安</label><input type="number" step="1" data-cfg="bandB.fore.1"></div><div class="field"><label>フォア 上限</label><input type="number" step="1" data-cfg="bandB.fore.2"></div></div>
-        <p class="subh">実測の厚さ（mm、品質チェック用）</p>
-        <div class="grid3"><div class="field"><label>A ヒール</label><input type="number" step="0.1" data-cfg="refA.0"></div><div class="field"><label>A ミッド</label><input type="number" step="0.1" data-cfg="refA.1"></div><div class="field"><label>A フォア</label><input type="number" step="0.1" data-cfg="refA.2"></div><div class="field"><label>B ヒール</label><input type="number" step="0.1" data-cfg="refB.0"></div><div class="field"><label>B ミッド</label><input type="number" step="0.1" data-cfg="refB.1"></div><div class="field"><label>B フォア</label><input type="number" step="0.1" data-cfg="refB.2"></div></div>
+        <p class="subh">シューズの基準（試験機相当の%）</p>
+        <div class="grid3"><div class="field"><label>ヒール 下限</label><input type="number" step="1" data-cfg="band.heel.0"></div><div class="field"><label>ヒール 目安</label><input type="number" step="1" data-cfg="band.heel.1"></div><div class="field"><label>ヒール 上限</label><input type="number" step="1" data-cfg="band.heel.2"></div><div class="field"><label>フォア 下限</label><input type="number" step="1" data-cfg="band.fore.0"></div><div class="field"><label>フォア 目安</label><input type="number" step="1" data-cfg="band.fore.1"></div><div class="field"><label>フォア 上限</label><input type="number" step="1" data-cfg="band.fore.2"></div></div>
+        <p class="hint">エアロエリートの試験機データが手元にないため、仮の値です。ミッドはヒールとフォアの平均を使います。</p>
+        <p class="subh">スコアの重み（%）</p>
+        <div class="grid3"><div class="field"><label>クッションの使い方</label><input type="number" step="1" data-cfg="weights.0"></div><div class="field"><label>左右のそろい具合</label><input type="number" step="1" data-cfg="weights.1"></div><div class="field"><label>走った感覚</label><input type="number" step="1" data-cfg="weights.2"></div></div>
+        <p class="subh">クッションの使い方（活用の重みa）</p>
+        <div class="grid3"><div class="field"><label>通常</label><input type="number" step="0.05" data-cfg="a"></div><div class="field"><label>走行距離が少ない人</label><input type="number" step="0.05" data-cfg="aLow"></div><div class="field"><label>少ないとする月間距離（km未満）</label><input type="number" step="1" data-cfg="lowMileage"></div></div>
+        <p class="subh">しきい値</p>
+        <div class="grid2"><div class="field"><label>「相性が良い」（点以上）</label><input type="number" step="1" data-cfg="good"></div><div class="field"><label>「十分使える」（点以上）</label><input type="number" step="1" data-cfg="okay"></div><div class="field"><label>左右の差がこの%で0点</label><input type="number" step="1" data-cfg="lrZero"></div><div class="field"><label>左右の比較から外す圧縮率（%未満）</label><input type="number" step="0.5" data-cfg="lrMin"></div><div class="field"><label>品質：有効フレーム（%未満で保留）</label><input type="number" step="1" data-cfg="qualityMin"></div></div>
         <div class="row"><button class="btn small" id="evCfgReset">判定の設定を初期値に戻す</button></div>
       </details>
     </div>
@@ -195,72 +187,82 @@
       <div class="row"><button class="btn" id="evBackup">バックアップを書き出す</button><button class="btn" id="evRestore">バックアップを読み込む</button></div>
       <input type="file" id="evRestoreFile" accept=".json,application/json" hidden>
       <div class="row"><button class="btn danger" id="evClear">全データを削除</button></div>
-      <p class="hint">データはこのブラウザの中にだけ保存されます（動画は保存しません）。体験会の途中でも、こまめにバックアップを書き出してください。</p>
+      <p class="hint">データはこのブラウザの中にだけ保存されます（動画は保存しません）。枠の合間に、こまめにバックアップを書き出してください。</p>
       <p class="status" id="evDataStatus"></p>
     </div>
   </aside>
   <div class="ev-main">
-    <div class="panel ev-none" id="evNone"><p>参加者を追加すると、事前入力・解析結果・判定がここに表示されます。</p><button class="btn primary" id="evAdd2">＋ 参加者を追加</button></div>
+    <div class="panel ev-none" id="evNone"><p>参加者を追加すると、申込内容・解析結果・相性スコアがここに表示されます。</p><button class="btn primary" id="evAdd2">＋ 参加者を追加</button></div>
     <div id="evDetail" hidden>
       <div class="panel" id="evSheetPanel">
-        <div class="panel-head"><h2>結果：マラソンペース適合プロファイル</h2><button class="btn small no-print" id="evPrint">印刷</button></div>
+        <div class="panel-head"><h2>結果</h2><div class="row" style="margin:0"><button class="btn small no-print" id="evReplay" hidden>発表をもう一度</button><button class="btn small no-print" id="evPrint">印刷</button></div></div>
         <div id="evSheet"></div>
       </div>
       <div class="panel">
-        <h2>スタッフ用チェック（警告）</h2>
+        <h2>スタッフ用チェック</h2>
         <ul class="ev-checks" id="evChecks"></ul>
       </div>
       <div class="panel">
-        <h2>事前入力</h2>
+        <h2>申込内容</h2>
         <p class="presum" id="evPreSummary"></p>
         <div class="grid2">
           <div class="field"><label for="evName">名前</label><input id="evName" type="text" data-f="name"></div>
-          <div class="field"><label for="evSlot">枠</label><select id="evSlot" data-f="slot"><option value="">—</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+          <div class="field"><label for="evSlot">予約時間</label><select id="evSlot" data-f="slot"></select></div>
         </div>
-        <label class="chk"><input type="checkbox" data-f="consent">撮影・データ利用（アシックスへの集計データ共有を含む）に同意済み</label>
         <div class="grid4">
-          <div class="field"><label>目標マラソンペース（キロ）</label><input type="text" data-f="pace" placeholder="4:58"></div>
-          <div class="field"><label>月間走行距離（km）</label><input type="number" data-f="monthly"></div>
+          <div class="field"><label>目標ペース（キロ）</label><input type="text" data-f="pace" placeholder="4:58"></div>
+          <div class="field"><label for="evMonthly">月間走行距離</label><select id="evMonthly" data-f="monthly"></select></div>
+          <div class="field"><label for="evSize">シューズサイズ（cm）</label><select id="evSize" data-f="shoeSize"></select></div>
           <div class="field"><label>体重（kg・任意）</label><input type="number" data-f="weight" placeholder="結果には出ません"></div>
-          <div class="field"><label>靴のサイズ</label><input type="text" data-f="shoeSize" placeholder="27.0"></div>
         </div>
-        <div class="field"><label>悩み・メモ</label><textarea rows="2" data-f="concern"></textarea></div>
-        <p class="presum">撮影の順番（おすすめ）：<b id="evOrder"></b></p>
+        <label class="chk"><input type="checkbox" data-f="consent">足元の撮影と、解析結果を開発・改善に使うことに同意済み</label>
+        <div class="grid2"><div class="field"><label for="evSns">写真・動画のSNS掲載</label><select id="evSns" data-f="sns"></select></div></div>
+        <div class="field"><label>メモ</label><textarea rows="2" data-f="memo"></textarea></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>当日の解析（2足 × 左右）</h2><div class="legend"><span><i class="sw a"></i><span class="shoeA-name"></span>（実線）</span><span><i class="sw b"></i><span class="shoeB-name"></span>（破線）</span></div></div>
-        <p class="hint" id="evNoResult">「解析」タブで1歩ずつ、接地と離地を指定して解析し、「この歩を追加」で保存してください。保存先の靴・脚は、順番に自動で切り替わります。</p>
+        <div class="panel-head"><h2>解析データ（左右）</h2><div class="legend"><span>実線：右足</span><span>破線：左足</span></div></div>
+        <p class="hint" id="evNoResult">「解析」タブで1歩ずつ、接地と離地を指定して解析し、「この歩を追加」で保存してください。保存先は右足→左足の順に自動で切り替わります。</p>
         <div id="evCompare" hidden>
           <div class="apt-wrap"><table class="ev-table leg-table" id="evLegTable"></table></div>
-          <p class="hint" id="evMm"></p>
+          <p class="hint">動画で測った最大圧縮率です（校正前）。最大圧縮のタイミングは、接地を0、離地を1としたときの位置です。</p>
           <div class="ev-curves" id="evCurves">
             <div><h3 style="--c:var(--heel)">ヒール</h3><canvas></canvas></div>
             <div><h3 style="--c:var(--mid)">ミッド</h3><canvas></canvas></div>
             <div><h3 style="--c:var(--fore)">フォア</h3><canvas></canvas></div>
           </div>
-          <p class="hint">横軸は接地から離地までを0〜100%にそろえています（外側の動画のみ）。濃い線が右脚、薄い線が左脚です。</p>
-          <div class="ev-steps">
-            <div><h3><i class="sw a"></i><span class="shoeA-name"></span>：歩ごとの最大（ヒール / ミッド / フォア）</h3><ul class="steplist" id="evSteps0"></ul></div>
-            <div><h3><i class="sw b"></i><span class="shoeB-name"></span>：歩ごとの最大（ヒール / ミッド / フォア）</h3><ul class="steplist" id="evSteps1"></ul></div>
-          </div>
+          <h3 class="subh2">保存した歩（ヒール / ミッド / フォアの最大%）</h3>
+          <ul class="steplist" id="evSteps"></ul>
         </div>
       </div>
       <div class="panel">
-        <h2>主観評価（走った直後に）</h2>
-        <div class="ev-feel">
-          <div><h3><i class="sw a"></i><span class="shoeA-name"></span></h3><div id="evSubj0"></div></div>
-          <div><h3><i class="sw b"></i><span class="shoeB-name"></span></h3><div id="evSubj1"></div></div>
-        </div>
-      </div>
-      <div class="panel">
-        <h2>本人が良かったと感じたシューズ（判定との照合用）</h2>
-        <div class="seg3" id="evChoice" role="group" aria-label="選んだシューズ"><button type="button" data-v="0">A</button><button type="button" data-v="1">B</button><button type="button" data-v="none">決められない</button></div>
-        <div class="field"><label for="evReason">理由</label><textarea id="evReason" rows="2"></textarea></div>
+        <h2>走った感覚（走った直後に聞く）</h2>
+        <div id="evSubj"></div>
         <div class="row"><button class="btn danger" id="evDelete">この参加者を削除</button></div>
       </div>
     </div>
   </div>
 </section>
+</div>
+</div>
+<div class="rv" id="rv" hidden role="dialog" aria-modal="true" aria-label="相性スコアの発表">
+  <canvas class="rv-fx" id="rvFx" aria-hidden="true"></canvas>
+  <div class="rv-in">
+    <p class="rv-name" id="rvName"></p>
+    <div id="rvP1">
+      <div class="rv-soles" aria-hidden="true"><div><i style="--c:var(--heel)"></i>ヒール</div><div><i style="--c:var(--mid)"></i>ミッド</div><div><i style="--c:var(--fore)"></i>フォア</div></div>
+      <p class="rv-msg" id="rvMsg" aria-live="polite"></p>
+      <div class="rv-prog"><i id="rvProg"></i></div>
+    </div>
+    <div id="rvP2" hidden><p class="rv-call">結果発表</p></div>
+    <div id="rvP3" hidden>
+      <div class="rv-ring" id="rvRing"><svg viewBox="0 0 220 220" aria-hidden="true"><circle class="trk" cx="110" cy="110" r="96"/><circle class="arc" id="rvArc" cx="110" cy="110" r="96" stroke-dasharray="603.19" stroke-dashoffset="603.19"/></svg><div class="rv-num" id="rvNumWrap"><span class="num" id="rvNum">0</span><small>/ 100</small></div></div>
+      <p class="rv-level" id="rvLevel"></p>
+      <ul class="rv-subs" id="rvSubs"></ul>
+      <div class="rv-actions" id="rvActions"><button type="button" class="btn primary" id="rvClose">くわしい結果を見る</button></div>
+    </div>
+  </div>
+  <button type="button" class="rv-skip" id="rvSkip">スキップ</button>
+</div>
 <script src="core.js"></script>
 <script src="app.js"></script>
 <script src="event.js"></script>

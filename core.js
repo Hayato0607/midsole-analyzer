@@ -1,4 +1,3 @@
-// 解析コア：自動検出・赤いテープの検出・追跡・厚みの推定（画面に依存しない部分）
 // Midsole compression analysis core (framework-free; runs in browser and Node)
 const Core = (() => {
   'use strict';
@@ -199,7 +198,11 @@ const Core = (() => {
     const d0 = [(B[0] - T[0]) / h0, (B[1] - T[1]) / h0], n0 = [-d0[1], d0[0]];
     const step = Math.max(0.5, h0 / 110);
     const uMin = -0.5 * h0, uMax = 1.55 * h0, count = Math.floor((uMax - uMin) / step) + 1;
-    return { T, B, h0, d0, n0, step, uMin, count, halfW: Math.max(2, Math.round(h0 * 0.05)) };
+    // a sticker next to the measuring line: its column (parallel, offset sideways by an) is what the top point
+    // follows from frame to frame, because the boundary right beside a sticker moves with the sticker
+    let an = null;
+    if (st.anchor) { const v = [st.anchor[0] - T[0], st.anchor[1] - T[1]]; if (Math.hypot(v[0], v[1]) < 0.6 * h0) an = v[0] * n0[0] + v[1] * n0[1]; }
+    return { T, B, h0, d0, n0, step, uMin, count, halfW: Math.max(2, Math.round(h0 * 0.05)), an };
   }
   // feature region (in reference coordinates): band above the top line + upper part of midsole
   function featureRegion(stations) {
@@ -281,8 +284,14 @@ const Core = (() => {
         const n = [-d[1], d[0]];
         return sampleProfile(frame.rgba, frame.w, frame.h, c, d, n, s, m);
       });
+      const aprofiles = this.meta.map((m, k) => {
+        if (m.an == null) return null;
+        const M = local[k], s = scaleOf(M), c = apply(M, m.T), ca = M.a / s, sb = M.b / s;
+        const d = [ca * m.d0[0] - sb * m.d0[1], sb * m.d0[0] + ca * m.d0[1]], n = [-d[1], d[0]];
+        return sampleProfile(frame.rgba, frame.w, frame.h, [c[0] + n[0] * m.an * s, c[1] + n[1] * m.an * s], d, n, s, m);
+      });
       const nIn = inliers.reduce((a, v) => a + (v ? 1 : 0), 0);
-      this.frames.push({ G, local, profiles, nFeatures: refPts.length, nInliers: nIn });
+      this.frames.push({ G, local, profiles, aprofiles, nFeatures: refPts.length, nInliers: nIn });
     }
     step(frame) {
       const { w, h, rgba } = frame;
@@ -325,15 +334,14 @@ const Core = (() => {
   }
 
   // ---------- scoring ----------
-  function scoreStation(profiles, meta) {
+  function scoreStation(profiles, meta, topProfiles) {
     const { step, uMin, count, h0 } = meta;
-    const F = profiles.length;
+    const F = profiles.length, TP = topProfiles && topProfiles.every(Boolean) ? topProfiles : profiles;
     const jT0 = Math.round((0 - uMin) / step), jB0 = Math.round((h0 - uMin) / step);
     const lin = Math.round(Math.min(Math.max(0.25 * h0, 6), 18) / step), lout = Math.round(Math.max(4, 0.08 * h0) / step);
     const linB = Math.round(Math.min(Math.max(0.32 * h0, 7), 22) / step), loutB = Math.round(Math.max(1.5, 0.025 * h0) / step);
-    const P0 = profiles[0];
-    const tmpl = (j0, a, b) => { const L = b - a + 1, t = new Float32Array(L * 3); for (let k = 0; k < L; k++) for (let c = 0; c < 3; c++) t[k * 3 + c] = P0[(j0 + a + k) * 3 + c]; return t; };
-    const tT = tmpl(jT0, -lout, lin), tB = tmpl(jB0, -linB, loutB), tB2 = tmpl(jB0, -lin, lout);
+    const tmpl = (P0, j0, a, b) => { const L = b - a + 1, t = new Float32Array(L * 3); for (let k = 0; k < L; k++) for (let c = 0; c < 3; c++) t[k * 3 + c] = P0[(j0 + a + k) * 3 + c]; return t; };
+    const tT = tmpl(TP[0], jT0, -lout, lin), tB = tmpl(profiles[0], jB0, -linB, loutB), tB2 = tmpl(profiles[0], jB0, -lin, lout);
     const ncc = (P, t, j0, a) => {
       const L = t.length / 3, out = new Float32Array(count).fill(-1);
       let mt = [0, 0, 0]; for (let k = 0; k < L; k++) for (let c = 0; c < 3; c++) mt[c] += t[k * 3 + c] / L;
@@ -358,23 +366,30 @@ const Core = (() => {
       }
       return g;
     };
-    const grads = profiles.map(grad);
+    const grads = profiles.map(grad), gradsT = TP === profiles ? grads : TP.map(grad);
     // robust normalisation of gradient strength across all frames
-    const all = []; grads.forEach(g => { for (let j = 0; j < count; j += 2) all.push(g[j]); });
-    all.sort((a, b) => a - b);
-    const gN = all[Math.floor(all.length * 0.985)] || 1;
+    const norm = gs => { const all = []; gs.forEach(g => { for (let j = 0; j < count; j += 2) all.push(g[j]); }); all.sort((a, b) => a - b); return all[Math.floor(all.length * 0.985)] || 1; };
+    const gN = norm(grads), gNT = TP === profiles ? gN : norm(gradsT);
+    // Which way the brightness steps at the sole's lower edge in the marked frame. On a light sole over a darker
+    // floor or shadow it gets darker going down; the edges of printed bands inside the midsole often get brighter
+    // going down instead. When the marked edge clearly darkens, only edges that darken the same way are trusted.
+    const wP = Math.max(2, Math.round(0.03 * h0 / step));
+    const lumCum = P => { const c = new Float32Array(count + 1); for (let j = 0; j < count; j++) c[j + 1] = c[j] + 0.299 * P[j * 3] + 0.587 * P[j * 3 + 1] + 0.114 * P[j * 3 + 2]; return c; };
+    const drop = (c, j) => { const a0 = Math.max(0, j - wP), b1 = Math.min(count, j + 1 + wP); if (j - a0 < 1 || b1 - j - 1 < 1) return 0; return (c[j] - c[a0]) / (j - a0) - (c[b1] - c[j + 1]) / (b1 - j - 1); };
+    const darkBelow = drop(lumCum(profiles[0]), jB0) > 12;
     const sT = [], sB = [], nT = [], nB = [];
     for (let f = 0; f < F; f++) {
-      const P = profiles[f], g = grads[f];
-      const a = ncc(P, tT, jT0, -lout), b1 = ncc(P, tB, jB0, -linB), b2 = ncc(P, tB2, jB0, -lin);
+      const P = profiles[f], g = grads[f], gt = gradsT[f], lc = darkBelow ? lumCum(P) : null;
+      const a = ncc(TP[f], tT, jT0, -lout), b1 = ncc(P, tB, jB0, -linB), b2 = ncc(P, tB2, jB0, -lin);
       const b = new Float32Array(count); for (let j = 0; j < count; j++) b[j] = Math.max(b1[j], b2[j]);
       const ST = new Float32Array(count), SB = new Float32Array(count);
       const lo = P.jLo ?? 0, hi = P.jHi ?? count - 1;
       for (let j = 0; j < count; j++) {
         if (j < lo + 1 || j > hi - 1) { ST[j] = 0; SB[j] = 0; a[j] = 0; b[j] = 0; continue; }
         const gn = Math.min(1, g[j] / gN);
-        ST[j] = 0.7 * a[j] + 0.3 * gn;
+        ST[j] = 0.7 * a[j] + 0.3 * Math.min(1, gt[j] / gNT);
         SB[j] = 0.65 * Math.max(0, b[j]) + 0.35 * gn;
+        if (lc) { const dl = drop(lc, j); SB[j] *= dl >= 6 ? 1 : dl <= -6 ? 0.12 : 0.12 + 0.88 * (dl + 6) / 12; }
       }
       sT.push(ST); sB.push(SB); nT.push(a); nB.push(b);
     }
@@ -402,7 +417,7 @@ const Core = (() => {
     const pct = 0.01 * h0 / step; // samples per 1% of h0
     const lamT = (params.lamTop ?? 0.01) / pct, lamH = (params.lamThick ?? 0.03) / pct;
     const aMin = Math.max(0, jT0 - Math.round(0.3 * h0 / step)), aMax = Math.min(count - 1, jT0 + Math.round(0.3 * h0 / step));
-    const mMin = Math.round(0.42 * h0 / step), mMax = Math.round(1.3 * h0 / step);
+    const mMin = Math.round((params.mMinFrac ?? 0.42) * h0 / step), mMax = Math.round(1.3 * h0 / step);
     const NA = aMax - aMin + 1, NM = mMax - mMin + 1, N = NA * NM;
     const NEG = -1e9;
     let cost = new Float32Array(N).fill(NEG);
@@ -646,6 +661,176 @@ const Core = (() => {
     return clusters.map(c => ({ x: c.x, r: c.r, ys: c.ys }));
   }
 
+  // Red round stickers searched over the whole frame (no prior midsole guess needed). Returns the best
+  // row of 2-4 similar round red dots lined up along the shoe, sorted by x, or [] when there is none.
+  function findMarkersGlobal(frame, box) {
+    const { rgba, w, h } = frame;
+    const m = new Uint8Array(w * h);
+    for (let i = 0, j = 0; i < w * h; i++, j += 4) { const r = rgba[j], mx = Math.max(rgba[j + 1], rgba[j + 2]); if (r > 90 && r - mx > 50 && r > 1.6 * mx) m[i] = 1; }
+    const lab = new Uint8Array(w * h), blobs = [];
+    const aMin = Math.PI * Math.pow(0.003 * w, 2), aMax = Math.PI * Math.pow(0.022 * w, 2);
+    for (let i = 0; i < w * h; i++) if (m[i] && !lab[i]) {
+      const stack = [i]; lab[i] = 1; let area = 0, sx = 0, sy = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+      while (stack.length) {
+        const c = stack.pop(), cx = c % w, cy = (c / w) | 0; area++; sx += cx; sy += cy;
+        if (cx < x0) x0 = cx; if (cx > x1) x1 = cx; if (cy < y0) y0 = cy; if (cy > y1) y1 = cy;
+        if (cx > 0 && m[c - 1] && !lab[c - 1]) { lab[c - 1] = 1; stack.push(c - 1); }
+        if (cx < w - 1 && m[c + 1] && !lab[c + 1]) { lab[c + 1] = 1; stack.push(c + 1); }
+        if (cy > 0 && m[c - w] && !lab[c - w]) { lab[c - w] = 1; stack.push(c - w); }
+        if (cy < h - 1 && m[c + w] && !lab[c + w]) { lab[c + w] = 1; stack.push(c + w); }
+      }
+      if (area < aMin || area > aMax) continue;
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1, ar = bw / bh;
+      if (ar < 0.5 || ar > 2 || area / (bw * bh) < 0.55) continue;
+      blobs.push({ x: sx / area, y: sy / area, r: Math.sqrt(area / Math.PI) });
+    }
+    blobs.sort((p, q) => p.x - q.x);
+    if (box) {
+      // keep dots on the detected shoe when that still leaves two or more (drops red labels in the background)
+      const L = box.x1 - box.x0, on = blobs.filter(b => b.x > box.x0 - 0.06 * L && b.x < box.x1 + 0.06 * L);
+      if (on.length >= 2) blobs.splice(0, blobs.length, ...on);
+    }
+    // best chain: neighbours 4-45% of the frame width apart, nearly level, similar size
+    const ok = (a, b) => { const dx = b.x - a.x; return dx > 0.04 * w && dx < 0.45 * w && Math.abs(b.y - a.y) < 0.2 * dx + 2 * Math.max(a.r, b.r) && Math.max(a.r, b.r) / Math.min(a.r, b.r) < 2; };
+    let best = [];
+    const grow = (chain) => {
+      if (chain.length > best.length || (chain.length === best.length && chain.length && spreadOf(chain) < spreadOf(best))) best = chain.slice();
+      if (chain.length >= 3) return;
+      const last = chain[chain.length - 1], i0 = blobs.indexOf(last);
+      for (let i = i0 + 1; i < blobs.length; i++) if (ok(last, blobs[i])) { chain.push(blobs[i]); grow(chain); chain.pop(); }
+    };
+    const spreadOf = (c) => { const rs = c.map(b => b.r); return Math.max(...rs) / Math.min(...rs); };
+    if (blobs.length <= 40) blobs.forEach(b => grow([b]));
+    return best.length >= 2 ? best : [];
+  }
+
+  // Stations anchored on the red stickers. The sticker only says where to look: the measuring line sits in a
+  // column just beside it, its top on the real upper/midsole boundary found there (on the red dot itself the
+  // boundary cannot be seen) and its bottom on the sole's lower edge. The sticker stays inside the tracked
+  // region, so it still steadies the tracking without ever being part of the measured profile.
+  function markerStations(frame, det, fr = [0.15, 0.42, 0.68]) {
+    let mk = findMarkersGlobal(frame, det && det.box);
+    if (mk.length < 2) return null;
+    const { w, h } = frame, xs = mk.map(b => b.x), rMax = Math.max(...mk.map(b => b.r));
+    let toeRight = det ? det.toeRight : true;
+    if (det && det.box && mk.length >= 3 && !det.lockToe) {
+      // stickers sit at 15/42/68% from the heel, so the end with the smaller gap to the stickers is the heel
+      const L = det.box.x1 - det.box.x0, gl = Math.min(...xs) - det.box.x0, gr = det.box.x1 - Math.max(...xs);
+      if (Math.abs(gl - gr) > 0.08 * L) toeRight = gl < gr;
+    }
+    let x0, x1;
+    if (det && det.box) { const L = (det.box.x1 - det.box.x0) / 0.96; x0 = det.box.x0 - 0.02 * L; x1 = det.box.x1 + 0.02 * L; }
+    const span = Math.max(...xs) - Math.min(...xs);
+    const inside = x0 !== undefined && Math.min(...xs) > x0 - 0.05 * (x1 - x0) && Math.max(...xs) < x1 + 0.05 * (x1 - x0) && span > 0.2 * (x1 - x0);
+    if (!inside) {
+      const L = mk.length >= 3 ? span / 0.53 : span / 0.4;
+      if (toeRight) { x0 = Math.min(...xs) - 0.15 * L; x1 = x0 + L; } else { x1 = Math.max(...xs) + 0.15 * L; x0 = x1 - L; }
+    }
+    x0 = Math.max(0, x0); x1 = Math.min(w - 1, x1);
+    const len = x1 - x0;
+    const yLine = x => { // sticker line, linear through the outer stickers
+      const a = mk[0], b = mk[mk.length - 1]; return a.y + (b.y - a.y) * (x - a.x) / ((b.x - a.x) || 1);
+    };
+    const yTop = Math.min(...mk.map(b => b.y)), yLow = Math.max(...mk.map(b => b.y));
+    const con = soleContours(frame, x0, x1, { yA: yTop + 2.5 * rMax, yB: Math.min(h - 3, yLow + 0.34 * len), tMin: 2 * rMax, tMax: 0.3 * len, tExp: 0.12 * len, tSig: 0.1 * len, wPrior: 0.1 });
+    if (!con) return null;
+    // the sole's lower edge: the lowest clear step from a darker band (floor or contact shadow) up to the
+    // brighter sole, searched from the floor upwards. Printed stripes higher in the midsole are never chosen.
+    const floorUp = (x, yMin, topY) => {
+      const ya = Math.round(yMin), yb = Math.min(h - 2, Math.round(yLow + 0.3 * len));
+      if (yb - ya < 12) return null;
+      const P = columnProfileRGB(frame.rgba, w, h, x, ya, yb, Math.max(2, Math.round(0.004 * len))), n = P.length / 3;
+      const d = Math.max(3, Math.round(0.01 * len)), stp = new Float32Array(n);
+      let mx = 0;
+      for (let i = d; i < n - d; i++) {
+        const A = [0, 0, 0], B = [0, 0, 0];
+        for (let q = 1; q <= d; q++) for (let c = 0; c < 3; c++) { A[c] += P[(i - q) * 3 + c] / d; B[c] += P[(i + q) * 3 + c] / d; }
+        const la = 0.299 * A[0] + 0.587 * A[1] + 0.114 * A[2], lb = 0.299 * B[0] + 0.587 * B[1] + 0.114 * B[2];
+        // colour change with the band below no brighter than the sole above it (floor / contact shadow)
+        stp[i] = lb <= la + 8 ? Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) : 0;
+        if (stp[i] > mx) mx = stp[i];
+      }
+      if (mx < 30) return null;
+      // floor well below the shoe, to recognise the floor seen through a gap under a lifted sole
+      const nr = Math.max(4, d), ref = [0, 0, 0];
+      for (let i = n - nr; i < n; i++) for (let c = 0; c < 3; c++) ref[c] += P[i * 3 + c] / nr;
+      const g = Math.max(2 * d, Math.round(0.035 * len));
+      for (let i = n - d - 2; i > d; i--) {
+        if (!(stp[i] >= 0.25 * mx && stp[i] >= 30 && stp[i] >= stp[i - 1] && stp[i] >= stp[i + 1])) continue;
+        const y = ya + i + 0.5;
+        // The lowest step is normally where the sole meets the floor. If that makes the midsole implausibly
+        // thick, the sole is off the ground (heel strike / toe-off) and this step is the top of its shadow on
+        // the floor: when the band above it is just floor, keep looking higher for the sole itself.
+        if (topY == null || y - topY <= 0.16 * len) return y;
+        const a0 = Math.max(0, i - g), m = [0, 0, 0], ls = [];
+        for (let k = a0; k < i - 1; k++) { for (let c = 0; c < 3; c++) m[c] += P[k * 3 + c]; ls.push(0.299 * P[k * 3] + 0.587 * P[k * 3 + 1] + 0.114 * P[k * 3 + 2]); }
+        const nb = ls.length;
+        if (nb >= d) {
+          const mu = ls.reduce((a, v) => a + v, 0) / nb, sd = Math.sqrt(ls.reduce((a, v) => a + (v - mu) ** 2, 0) / nb);
+          if (Math.hypot(m[0] / nb - ref[0], m[1] / nb - ref[1], m[2] / nb - ref[2]) < 22 && sd < 14) continue;
+        }
+        return y;
+      }
+      return null;
+    };
+    // the sole edge found from the floor up is trusted over the contour (which can follow the printed bands);
+    // the contour is only a fallback, kept to a plausible midsole thickness
+    const botAt = (x, topY) => {
+      const yf = floorUp(x, yLine(x) + 2 * rMax, topY);
+      if (yf !== null) return yf;
+      const yc = interpC(con.xs, con.bot, x), t0 = topY == null ? yLine(x) : topY;
+      return Math.min(t0 + 0.16 * len, Math.max(t0 + 0.07 * len, yc));
+    };
+    const fOf = x => toeRight ? (x - x0) / len : (x1 - x) / len;
+    // which station each sticker belongs to (three stickers = heel/mid/fore in order along the shoe)
+    const byF = mk.slice().sort((p, q) => fOf(p.x) - fOf(q.x));
+    let assign = [null, null, null];
+    if (byF.length === 3) assign = byF;
+    else {
+      const free = byF.slice();
+      fr.forEach((f, k) => { let bi = -1, bd = 0.18; free.forEach((c, j) => { const d = Math.abs(fOf(c.x) - f); if (d < bd) { bd = d; bi = j; } }); if (bi >= 0) assign[k] = free.splice(bi, 1)[0]; });
+    }
+    // upper/midsole boundary in a column beside sticker c. Both sides are tried and the clearer edge wins.
+    // Edges near the sticker's height are preferred; ones well below it (print or the lip's lower edge) are not.
+    // The side toward the middle of the shoe is preferred: toward the toe the sole curves up (toe spring) and
+    // toward the heel it bevels, so the sole's lower edge is harder to follow there.
+    const besideTop = c => {
+      const r = Math.max(3, c.r), off = 1.5 * r + 3, hw = Math.max(1, Math.round(0.3 * r));
+      const ya = Math.max(1, Math.round(c.y - 1.2 * r - 3)), yb = Math.min(h - 2, Math.round(c.y + 0.9 * r + 3)), yc = c.y - 0.1 * r;
+      const inward = Math.sign(0.5 * (x0 + x1) - c.x) || 1, cand = {};
+      for (const sd of [inward, -inward]) {
+        const x = c.x + sd * off;
+        if (x < 3 || x > w - 4 || yb - ya < 10) continue;
+        const P = columnProfileRGB(frame.rgba, w, h, x, ya, yb, hw), n = P.length / 3, g = new Float32Array(n);
+        for (let i = 2; i < n - 2; i++) { let q = 0; for (let ch = 0; ch < 3; ch++) { const v = 0.25 * (P[(i + 2) * 3 + ch] + P[(i + 1) * 3 + ch] - P[(i - 1) * 3 + ch] - P[(i - 2) * 3 + ch]); q += v * v; } g[i] = Math.sqrt(q); }
+        let best = null;
+        for (let i = 3; i < n - 3; i++) {
+          if (g[i] < g[i - 1] || g[i] < g[i + 1]) continue;
+          const d = ya + i - yc;
+          if (d < -1.2 * r || d > 0.9 * r) continue;
+          const sg = d < 0 ? 0.7 * r : 0.45 * r, sc = g[i] * Math.exp(-0.5 * (d / sg) ** 2);
+          if (best && sc <= best.sc) continue;
+          const l = g[i - 1], m = g[i], q = g[i + 1], den = l - 2 * m + q, o = den < -1e-6 ? Math.max(-0.5, Math.min(0.5, 0.5 * (l - q) / den)) : 0;
+          best = { sc, x, y: ya + i + o };
+        }
+        cand[sd] = best;
+      }
+      const a = cand[inward], b = cand[-inward];
+      const pick = a && a.sc >= 10 && (!b || a.sc >= 0.6 * b.sc) ? a : b && b.sc >= 10 ? b : null;
+      return pick || { x: c.x + inward * off, y: c.y, sc: 0 };
+    };
+    const st = fr.map((f, k) => {
+      const c = assign[k];
+      if (c) { const t = besideTop(c); return { top: [t.x, t.y], bot: [t.x, Math.max(botAt(t.x, t.y), t.y + 4 * rMax)], anchor: [c.x, c.y] }; }
+      const x = toeRight ? x0 + f * len : x1 - f * len, y = yLine(x);
+      return { top: [x, y], bot: [x, Math.max(botAt(x, y), y + 4 * rMax)] };
+    });
+    st.markers = { found: mk.map(b => ({ x: b.x, r: b.r, ys: [b.y] })), used: assign.map(Boolean), anchored: true };
+    st.contours = con;
+    const bots = st.map(s => s.bot[1]).sort((p, q) => p - q);
+    return { stations: st, box: { x0, x1, y0: yTop, y1: bots[1] }, toeRight };
+  }
+
   // place 3 stations from a box around the midsole (x0..x1 = shoe length, y0 = midsole top, y1 = bottom).
   // Red tape markers, when present, set where along the shoe each station sits.
   function placeStations(frame, box, toeRight, fr = [0.15, 0.42, 0.68]) {
@@ -754,6 +939,17 @@ const Core = (() => {
     const colBottom = new Map(), colTop = new Map();
     for (const c of best.pts) { const cx = c % gw, cy = (c / gw) | 0; colBottom.set(cx, Math.max(colBottom.get(cx) ?? -1, cy)); colTop.set(cx, Math.min(colTop.get(cx) ?? 1e9, cy)); }
     const cols = [...colBottom.keys()].sort((a, b) => a - b);
+    if (fgArr && mode === 'motion') {
+      // a plain, untextured midsole (e.g. smooth white foam) fails the sharpness test, so the mask stops at
+      // the upper/midsole seam. Extend each column down through the plain foreground (colour differs from the
+      // background) so the bottom of the shoe is found at the floor, not at the seam.
+      const lim = Math.max(3, Math.round(0.16 * cols.length));
+      for (const c of cols) {
+        let by = colBottom.get(c), ext = 0;
+        while (ext < lim && by + 1 < gh && (fgArr[(by + 1) * gw + c] || (by + 2 < gh && fgArr[(by + 2) * gw + c]))) { by++; ext++; }
+        colBottom.set(c, by);
+      }
+    }
     const bottoms = cols.map(c => colBottom.get(c)).sort((a, b) => a - b);
     const yCoarse = (bottoms[Math.floor(bottoms.length * 0.6)] + 1) * bs, yLow = (bottoms[Math.floor(bottoms.length * 0.9)] + 1) * bs;
     const tol = Math.max(3 * bs, 0.1 * cols.length * bs);
@@ -857,6 +1053,5 @@ const Core = (() => {
     return { box, toeRight, mode, contours: con, clipped, votes, dbg, maskInfo: { bs, gw, gh, mm: Array.from(mm).join('') } };
   }
 
-  return { findRedMarkers, toGray, Tracker, scoreStation, solveStation, stationMeta, placeStations, autoDetect, apply, scaleOf, featureRegion };
+  return { findRedMarkers, findMarkersGlobal, markerStations, toGray, Tracker, scoreStation, solveStation, stationMeta, placeStations, autoDetect, apply, scaleOf, featureRegion };
 })();
-if (typeof module !== 'undefined') module.exports = Core;

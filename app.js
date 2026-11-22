@@ -1,4 +1,3 @@
-// 画面の動き：動画の読み込み、接地・離地の指定、解析、描画、CSV書き出し
 (() => {
 'use strict';
 const C = Core;
@@ -67,7 +66,7 @@ async function loadFile(file) {
   updateUI(); drawAll();
 }
 function resetAll() {
-  S.loaded = false; S.mark = S.start = S.end = null; S.stations = null; S.box = null; S.A = null; S.kymo = [];
+  S.loaded = false; S.mark = S.start = S.end = null; S.stations = null; S.box = null; S.A = null; S.kymo = []; S.autoMark = false;
   say('#detectStatus', ''); say('#runStatus', ''); say('#rangeStatus', ''); say('#baseStatus', ''); say('#csvStatus', '');
   $('#csvBox').hidden = true;
   S.scale = { mm: S.scale ? S.scale.mm : null, px: null, p0: null, p1: null, picking: 0 }; say('#scaleStatus', '');
@@ -113,7 +112,22 @@ function markerMsg(st) {
 }
 function defaultRange() {
   S.start = null; S.end = null;
-  say('#rangeStatus', '接地した瞬間と離地した瞬間を指定してください。接地の瞬間が無負荷の基準になります。');
+  say('#rangeStatus', '接地した瞬間（靴底が地面に触れた最初のフレーム）と、離地した瞬間を指定してください。');
+}
+// finds the shoe and the stickers in frame i (no UI changes)
+async function detectAt(i, keep) {
+  const cur = await grab(i);
+  if (keep) {
+    // re-detection during the analysis: the toe direction and the shoe's extent were already confirmed on the
+    // detection frame (the shoe is planted while on the ground), so they are kept. Something else moving in the
+    // background, such as the other foot, then cannot flip heel and toe.
+    return { cur, det: null, ms: C.markerStations(cur, { box: keep.box, toeRight: keep.toeRight, lockToe: true }) };
+  }
+  const prev = i >= 3 ? await grab(i - 3) : null;
+  const samples = [];
+  for (let k = 0; k < 9; k++) samples.push(await grab(Math.round(k * (S.N - 1) / 8)));
+  const det = C.autoDetect(cur, samples, prev);
+  return { cur, det, ms: C.markerStations(cur, det) };
 }
 async function detect() {
   if (!S.loaded || S.busy) return;
@@ -121,13 +135,16 @@ async function detect() {
   const i = curIdx();
   say('#detectStatus', '検出中…');
   try {
-    const cur = await grab(i);
-    const prev = i >= 3 ? await grab(i - 3) : null;
-    const samples = [];
-    for (let k = 0; k < 9; k++) samples.push(await grab(Math.round(k * (S.N - 1) / 8)));
+    const { cur, det, ms } = await detectAt(i);
     await seekTo(i);
-    const det = C.autoDetect(cur, samples, prev);
-    S.busy = false;
+    S.busy = false; S.autoMark = false;
+    if (ms) {
+      S.box = ms.box; S.toeRight = ms.toeRight; S.mark = i; S.stations = ms.stations; S.autoMark = true;
+      defaultRange();
+      const n = ms.stations.markers.used.filter(Boolean).length;
+      onStationsChanged(`赤いシールを${ms.stations.markers.found.length}か所見つけ、シールのすぐ横で、アッパーとの境目から靴底までを測る位置に合わせました（つま先は${S.toeRight ? '右' : '左'}向き）。${n < 3 ? '見つからなかった部位は、靴の長さの割合で置いています。' : ''}靴底の線が地面との境目に合っているか確認してください。`);
+      return;
+    }
     if (!det) { say('#detectStatus', '靴を見つけられませんでした。動画の上でミッドソールを囲むようにドラッグしてください。', 'warn'); updateUI(); drawAll(); return; }
     S.box = det.box; S.toeRight = det.toeRight; S.mark = i;
     S.stations = C.placeStations(cur, det.box, det.toeRight);
@@ -140,7 +157,7 @@ async function detect() {
 }
 function flip() {
   if (!S.stations) return;
-  S.toeRight = !S.toeRight;
+  S.toeRight = !S.toeRight; S.autoMark = false;
   S.stations = S.stations.slice().reverse();
   onStationsChanged(`つま先を${S.toeRight ? '右' : '左'}向きにしました。`);
 }
@@ -152,17 +169,38 @@ async function analyze() {
   const fw = [], bw = [];
   for (let i = S.mark; i <= S.end; i++) fw.push(i);
   for (let i = S.mark; i >= S.start; i--) bw.push(i);
-  const total = Math.max(1, fw.length + bw.length - 2); let done = 0;
+  let done = 0;
   const prog = $('#prog'); prog.hidden = false; prog.value = 0;
   say('#runStatus', '解析中…');
   const t0 = performance.now();
+  let remark = '';
   try {
+    // The tracking templates and the measuring points come from the marked frame. A frame where the whole sole
+    // is on the ground gives the clearest sole edge at all three places (at heel strike or toe-off part of the
+    // sole is in the air, and its edge is easily confused with its shadow or the printed bands), so automatic
+    // points are re-detected about a third of the way into contact. Points moved by hand are kept as they are.
+    if (S.autoMark && S.start !== null && S.end !== null && S.end - S.start >= 6) {
+      const tgt = S.start + Math.round(0.35 * (S.end - S.start));
+      if (tgt !== S.mark) {
+        say('#runStatus', '足裏全体が地面に着いているフレームで、測定点を合わせ直しています…');
+        const r = await detectAt(tgt, { box: S.box, toeRight: S.toeRight });
+        const nUsed = st => st && st.markers && st.markers.used ? st.markers.used.filter(Boolean).length : 0;
+        if (r.ms && r.ms.toeRight === S.toeRight && nUsed(r.ms.stations) >= nUsed(S.stations)) {
+          S.mark = tgt; S.stations = r.ms.stations; S.box = r.ms.box; S.toeRight = r.ms.toeRight;
+          remark = `測定点は、足裏全体が地面に着いている f${tgt + 1} で合わせ直しました。`;
+          fw.length = 0; bw.length = 0;
+          for (let i = S.mark; i <= S.end; i++) fw.push(i);
+          for (let i = S.mark; i >= S.start; i--) bw.push(i);
+        }
+        say('#runStatus', '解析中…');
+      }
+    }
     const markFrame = await grab(S.mark);
     const run = async (order) => {
       const tr = new C.Tracker(markFrame, S.stations);
       for (const i of order.slice(1)) {
         const f = await grab(i); tr.step(f); done++;
-        prog.value = done / total;
+        prog.value = done / Math.max(1, fw.length + bw.length - 2);
         say('#stageNote', `解析中 f${i + 1}`);
       }
       return tr;
@@ -173,17 +211,17 @@ async function analyze() {
       order,
       local: tr.frames.map(f => f.local),
       profiles: tr.meta.map((m, k) => tr.frames.map(f => f.profiles[k])),
-      scores: tr.meta.map((m, k) => C.scoreStation(tr.frames.map(f => f.profiles[k]), m)),
+      scores: tr.meta.map((m, k) => C.scoreStation(tr.frames.map(f => f.profiles[k]), m, m.an == null ? null : tr.frames.map(f => f.aprofiles[k]))),
       cons: tr.meta.map(() => new Map()),
       res: null
     }));
-    const A = { meta: tf.meta, halves, first: S.start, last: S.end, base: S.start, timeline: new Map(), hb: [], peak: [], heelOff: null, heelOffAuto: true };
+    const A = { meta: tf.meta, halves, first: S.start, last: S.end, base: S.start, timeline: new Map(), hb: [], peak: [], td: [], heelOff: null, heelOffAuto: true };
     halves.forEach((H, hi) => H.order.forEach((fi, j) => { if (!A.timeline.has(fi)) A.timeline.set(fi, { hi, j }); }));
     S.A = A;
     solveAll(); buildKymos(); afterSolve();
     const lost = tf.frames.concat(tb ? tb.frames : []).filter(f => f.nInliers < 4).length;
     const q = qualityOf(A), qLow = q.some(v => v < 0.8);
-    say('#runStatus', `完了しました（${A.timeline.size}フレーム、${((performance.now() - t0) / 1000).toFixed(1)}秒）。品質（有効フレームの割合）：${ZONE_NAMES.map((z, k) => `${z} ${Math.round(q[k] * 100)}%`).join('・')}。${lost ? `靴全体の追跡が不安定なフレームが${lost}あります。` : ''}${qLow ? '80%未満の部位があるため、体験会の判定では品質ゲートにかかることがあります。' : ''}`, (lost || qLow) ? 'warn' : 'ok');
+    say('#runStatus', `完了しました（${A.timeline.size}フレーム、${((performance.now() - t0) / 1000).toFixed(1)}秒）。${remark}品質（有効フレームの割合）：${ZONE_NAMES.map((z, k) => `${z} ${Math.round(q[k] * 100)}%`).join('・')}。${lost ? `靴全体の追跡が不安定なフレームが${lost}あります。` : ''}${qLow ? '80%未満の部位があるため、相性スコアは保留になることがあります。' : ''}`, (lost || qLow) ? 'warn' : 'ok');
     say('#stageNote', '');
     await seekTo(0);
   } catch (e) {
@@ -191,28 +229,73 @@ async function analyze() {
   }
   prog.hidden = true; S.busy = false; updateUI(); drawAll();
 }
+// sticker-anchored stations measure from the sticker to the sole, marked on a frame where the whole sole is on
+// the ground: from there a real midsole never loses more than about a quarter, so thinner solutions are the
+// edges of printed bands, not the sole edge
+function solveParams() { return { lamThick: S.lam, mMinFrac: S.stations && S.stations.markers && S.stations.markers.anchored ? 0.72 : 0.42 }; }
 function solveAll() {
   const A = S.A; if (!A) return;
-  A.halves.forEach(H => { H.res = A.meta.map((m, k) => C.solveStation(H.scores[k], m, { lamThick: S.lam }, H.cons[k])); });
+  A.halves.forEach(H => { H.res = A.meta.map((m, k) => C.solveStation(H.scores[k], m, solveParams(), H.cons[k])); });
 }
 function resAt(k, fi) { const e = S.A && S.A.timeline.get(fi); return e ? S.A.halves[e.hi].res[k][e.j] : null; }
 function compRaw(k, fi) { const r = resAt(k, fi); return r && r.valid ? 1 - r.h / S.A.hb[k] : null; }
 function heelZero(k, fi) { return k === 0 && !!S.A && S.A.heelOff !== null && fi >= S.A.heelOff && fi <= S.A.last; }
-function compAt(k, fi) { if (heelZero(k, fi)) return 0; const v = compRaw(k, fi); return v === null ? null : Math.max(0, v); }
+// before a part of the sole has touched the ground it carries no load: its compression is zero there
+function preTouch(k, fi) { const t = S.A && S.A.td ? S.A.td[k] : null; return t != null && fi >= S.A.first && fi < t; }
+function compAt(k, fi) { if (heelZero(k, fi) || preTouch(k, fi)) return 0; const v = compRaw(k, fi); return v === null ? null : Math.max(0, v); }
+// The frame where this part of the sole comes down onto the floor. At heel strike the midfoot and forefoot are
+// still in the air, and there their lower edge cannot be told reliably from the shadow or the printed bands.
+// So each part is referenced to its own touchdown: the first frame from which its lower edge stays on the floor
+// line (the lowest place the edge reaches) with a plausible thickness.
+function touchdownOf(k) {
+  const A = S.A, fr = [];
+  for (let fi = A.first; fi <= A.last; fi++) { const g = A.timeline.has(fi) ? stationGeom(k, fi) : null; if (g && g.r && g.r.valid) fr.push({ fi, y: g.bot[1], h: g.r.h }); }
+  if (fr.length < 5) return null;
+  const ys = fr.map(o => o.y).sort((a, b) => a - b), floorY = ys[Math.floor(0.8 * (ys.length - 1))];
+  const tol = Math.max(2.5, 0.04 * A.meta[k].h0);
+  const near = fr.filter(o => o.y >= floorY - tol);
+  if (near.length < 3) return null;
+  const hs = near.map(o => o.h).sort((a, b) => a - b), medH = hs[Math.floor(hs.length / 2)];
+  const on = new Map(fr.map(o => [o.fi, o.y >= floorY - tol && o.h <= 1.3 * medH && o.h >= 0.6 * medH]));
+  for (let fi = A.first; fi <= A.last; fi++) {
+    if (!on.get(fi)) continue;
+    let n = 0; for (let q = fi; q <= Math.min(A.last, fi + 3); q++) if (on.get(q)) n++;
+    if (n >= 3) return k === 0 || fi - A.first <= 2 ? A.first : fi;
+  }
+  return null;
+}
 function afterSolve() {
   const A = S.A;
+  A.td = A.meta.map((m, k) => touchdownOf(k));
   A.hb = A.meta.map((m, k) => {
+    const ref = A.td[k] != null ? A.td[k] : A.base;
     let best = null, bd = Infinity;
-    for (const fi of A.timeline.keys()) { const r = resAt(k, fi); if (r && r.valid && Math.abs(fi - A.base) < bd) { bd = Math.abs(fi - A.base); best = r.h; } }
+    for (const fi of A.timeline.keys()) { const r = resAt(k, fi); if (r && r.valid && Math.abs(fi - ref) < bd) { bd = Math.abs(fi - ref); best = r.h; } }
     return best || m.h0;
   });
   A.heelOff = A.first + Math.round(0.7 * (A.last - A.first));
+  // the heel leaves the ground earlier on rocker soles: once the heel's top point has risen clearly above
+  // where it sat at contact, what follows is the heel lifting, not compression
+  {
+    const g0 = stationGeom(0, A.base);
+    if (g0) {
+      const lift = 0.12 * A.meta[0].h0 * g0.s;
+      for (let fi = A.base + 1; fi < A.heelOff; fi++) { const g = stationGeom(0, fi); if (g && g0.top[1] - g.top[1] > lift) { A.heelOff = fi; break; } }
+    }
+  }
+  // the peak is read from a 3-frame median, so a single mis-tracked frame cannot set it
   A.peak = A.meta.map((m, k) => {
     let pk = null;
-    for (const fi of A.timeline.keys()) { const v = compAt(k, fi); if (v !== null && (!pk || v > pk.v)) pk = { v, fi }; }
+    for (let fi = A.first; fi <= A.last; fi++) {
+      const v = compAt(k, fi); if (v === null) continue;
+      const nb = [compAt(k, fi - 1), v, compAt(k, fi + 1)].filter(x => x !== null && x !== undefined && fi >= A.first);
+      const sm = nb.length === 3 ? nb.sort((a, b) => a - b)[1] : v;
+      if (!pk || sm > pk.v) pk = { v: sm, fi };
+    }
     return pk;
   });
-  say('#baseStatus', `無負荷の基準は接地の瞬間（f${A.base + 1}）です。`);
+  const tdTxt = A.td.map((t, k) => `${ZONE_NAMES[k]} f${(t != null ? t : A.base) + 1}`).join('・');
+  say('#baseStatus', `無負荷の基準は、各部位が地面に着いた瞬間です（${tdTxt}）。`);
   drawAll();
 }
 function stationGeom(k, fi) {
@@ -230,7 +313,7 @@ function applyConstraint(d) {
   if (d.which === 'top') jt = j; else jb = j;
   if (jb - jt < 3) return;
   g.H.cons[d.k].set(g.e.j, { jt, m: jb - jt });
-  g.H.res[d.k] = C.solveStation(g.H.scores[d.k], g.m, { lamThick: S.lam }, g.H.cons[d.k]);
+  g.H.res[d.k] = C.solveStation(g.H.scores[d.k], g.m, solveParams(), g.H.cons[d.k]);
   afterSolve();
   say('#runStatus', `${NAMES[d.k]}の f${d.fi + 1} を補正して追跡をやり直しました。`, 'ok');
 }
@@ -287,11 +370,14 @@ function drawOverlay() {
       const g = stationGeom(k, fi);
       let a = toD(r, g.top), b = toD(r, g.bot);
       if (S.drag && S.drag.kind === 'cons' && S.drag.k === k) { if (S.drag.which === 'top') a = toD(r, S.drag.p); else b = toD(r, S.drag.p); }
-      const v = compAt(k, fi);
-      seg(octx, a, b, v === null ? 'rgba(205,210,215,.85)' : colors[k], 3, v === null ? [5, 5] : null);
+      const v = compAt(k, fi), pre = preTouch(k, fi);
+      // before this part of the sole touches down it is not measured: drawn faint so its line is not read as a result
+      if (pre) octx.globalAlpha = 0.35;
+      seg(octx, a, b, v === null || pre ? 'rgba(205,210,215,.85)' : colors[k], 3, v === null || pre ? [5, 5] : null);
       if (video.paused) { dot(octx, a, colors[k], 5); dot(octx, b, colors[k], 5); }
       if (g.r.constrained) { octx.save(); octx.strokeStyle = '#fff'; octx.lineWidth = 1.5; octx.beginPath(); octx.arc(b[0], b[1], 9, 0, Math.PI * 2); octx.stroke(); octx.restore(); }
-      tag(octx, a, v === null ? `${NAMES[k]} —` : `${(v * 100).toFixed(1)}%`, colors[k]);
+      octx.globalAlpha = 1;
+      tag(octx, a, pre ? `${NAMES[k]} 接地前` : v === null ? `${NAMES[k]} —` : `${(v * 100).toFixed(1)}%`, colors[k]);
     }
   } else if (S.stations) {
     const editable = fi === S.mark;
@@ -321,7 +407,8 @@ function drawReadouts() {
     if (S.A) {
       const pk = S.A.peak[k];
       sub = pk ? `最大 ${(pk.v * 100).toFixed(1)}%（f${pk.fi + 1}）` : '測定できたフレームがありません';
-      if (r && !heelZero(k, fi)) sub += r.valid ? `\n厚み ${(r.h).toFixed(1)} px` : (S.A.timeline.has(fi) ? (r.inFrame ? '\nこのフレームは追跡不良' : '\nこのフレームは画面外') : '');
+      if (preTouch(k, fi)) sub += '\nこの部位はまだ地面に着いていません';
+      else if (r && !heelZero(k, fi)) sub += r.valid ? `\n厚み ${(r.h).toFixed(1)} px` : (S.A.timeline.has(fi) ? (r.inFrame ? '\nこのフレームは追跡不良' : '\nこのフレームは画面外') : '');
     }
     el.querySelector('.g-sub').textContent = sub;
     el.querySelector('.g-sub').style.whiteSpace = 'pre-line';
@@ -411,7 +498,7 @@ function updateUI() {
   ['#prev', '#play', '#next', '#scrub'].forEach(s => { $(s).disabled = !S.loaded || S.busy; });
   $('#detect').disabled = !L; $('#flip').disabled = !St || !!S.A;
   $('#setStart').disabled = !St; $('#setEnd').disabled = !St; $('#run').disabled = !St || S.start === null || S.end === null;
-  ['#smooth', '#clearCons', '#csv', '#rangeOnly'].forEach(s => { $(s).disabled = !A; });
+  ['#clearCons', '#csv', '#rangeOnly'].forEach(s => { $(s).disabled = !A; });
   $('#pick').disabled = S.busy; $('#scalePick').disabled = !S.loaded || S.busy;
   const state = (done, active) => done ? 'done' : (active ? 'active' : '');
   $('#s1').dataset.state = state(S.loaded, true);
@@ -494,10 +581,6 @@ $('#setEnd').addEventListener('click', () => {
   S.end = i; S.A = null; rangeMsg(); updateUI(); drawAll();
 });
 $('#run').addEventListener('click', analyze);
-$('#smooth').addEventListener('input', e => {
-  const v = +e.target.value / 100; S.lam = 0.006 + Math.pow(v, 1.6) * 0.1;
-  if (S.A) { solveAll(); afterSolve(); }
-});
 $('#capfps').addEventListener('input', e => { S.capFps = +e.target.value > 0 ? +e.target.value : 0; drawAll(); });
 $('#clearCons').addEventListener('click', () => { if (!S.A) return; S.A.halves.forEach(H => H.cons.forEach(c => c.clear())); solveAll(); afterSolve(); say('#runStatus', '手動の補正を消しました。'); });
 function scaleMsg() {
@@ -521,7 +604,7 @@ function buildCSV() {
     row.push(heelZero(0, fi) ? 1 : 0);
     rows.push(row.join(','));
   }
-  rows.push(`# baseline_frame=${A.base + 1}, mark_frame=${S.mark + 1}, video_fps=${S.fps}, heel_zero_from_frame=${A.heelOff === null ? '' : A.heelOff + 1}`);
+  rows.push(`# baseline_frame=${A.base + 1}, touchdown_frames=${(A.td || []).map(t => t == null ? '' : t + 1).join('/')}, mark_frame=${S.mark + 1}, video_fps=${S.fps}, heel_zero_from_frame=${A.heelOff === null ? '' : A.heelOff + 1}`);
   return rows.join('\n') + '\n';
 }
 $('#csv').addEventListener('click', async () => {
@@ -585,11 +668,11 @@ overlay.addEventListener('pointerup', () => {
   if (d.kind === 'box') {
     const x0 = Math.min(d.p0[0], d.p1[0]), x1 = Math.max(d.p0[0], d.p1[0]), y0 = Math.min(d.p0[1], d.p1[1]), y1 = Math.max(d.p0[1], d.p1[1]);
     if (x1 - x0 > 24 && y1 - y0 > 6) {
-      S.box = { x0, y0, x1, y1 }; S.mark = curIdx();
+      S.box = { x0, y0, x1, y1 }; S.mark = curIdx(); S.autoMark = false;
       S.stations = C.placeStations(grabNow(), S.box, S.toeRight); defaultRange();
       onStationsChanged(`枠の中でミッドソールの上端・下端に合わせました（つま先は${S.toeRight ? '右' : '左'}向き）。${markerMsg(S.stations)}`);
     }
-  } else if (d.kind === 'pt') { if (d.moved) onStationsChanged('点を動かしました。'); }
+  } else if (d.kind === 'pt') { if (d.moved) { S.autoMark = false; onStationsChanged('点を動かしました。'); } }
   else if (d.kind === 'cons' && d.p) applyConstraint(d);
   drawAll();
 });
@@ -632,7 +715,7 @@ async function saveText(filename, text) {
   }
   try { await navigator.clipboard.writeText(text); return 'clipboard'; } catch (e) { return 'fail'; }
 }
-function qualityOf(A) { return A.meta.map((m, k) => { let n = 0, ok = 0; for (let fi = A.first; fi <= A.last; fi++) { const r = resAt(k, fi); if (!r) continue; n++; if (r.valid) ok++; } return n ? ok / n : 0; }); }
+function qualityOf(A) { return A.meta.map((m, k) => { let n = 0, ok = 0; for (let fi = A.first; fi <= A.last; fi++) { const r = resAt(k, fi); if (!r || heelZero(k, fi) || preTouch(k, fi)) continue; n++; if (r.valid) ok++; } return n ? ok / n : 0; }); }
 function snapshot() {
   const A = S.A; if (!A || S.busy) return null;
   const frames = []; for (let fi = A.first; fi <= A.last; fi++) if (A.timeline.has(fi)) frames.push(fi);
@@ -644,7 +727,7 @@ function snapshot() {
     raw: [0, 1, 2].map(k => frames.map(fi => pct(compRaw(k, fi)))),
     thick: [0, 1, 2].map(k => frames.map(fi => { const r = resAt(k, fi); return r ? +r.h.toFixed(2) : null; })),
     peak: A.peak.map(p => p ? { v: +(p.v * 100).toFixed(2), f: p.fi - A.base } : null),
-    vw: S.vw, vh: S.vh, quality: qualityOf(A).map(v => +v.toFixed(3)), h0: A.hb.map(v => +v.toFixed(2)),
+    vw: S.vw, vh: S.vh, quality: qualityOf(A).map(v => +v.toFixed(3)), h0: A.hb.map(v => +v.toFixed(2)), td: (A.td || []).map(t => t == null ? null : t - A.base),
     mmPerPx: S.scale && S.scale.mm && S.scale.px ? +(S.scale.mm / S.scale.px).toFixed(5) : null,
     savedAt: new Date().toISOString()
   };
